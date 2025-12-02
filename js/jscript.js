@@ -1,8 +1,8 @@
- // Firebase configuration
+  // Firebase configuration
     const firebaseConfig = {
         apiKey: "AIzaSyCrdGHXxVKQ2BiU6___9fOqVDwIECLq8pk",
         authDomain: "jejak-mufassir.firebaseapp.com",
-        databaseURL: "https://jejak-mufassir-default-rtdb.firebaseio.com ",
+        databaseURL: "https://jejak-mufassir-default-rtdb.firebaseio.com",
         projectId: "jejak-mufassir",
         storageBucket: "jejak-mufassir.appspot.com",
         messagingSenderId: "469253249038",
@@ -36,7 +36,7 @@
         return urlParams.get('affid');
     }
 
- // Fungsi utama untuk memuat data produk
+// Fungsi utama untuk memuat data produk
 function loadProductData() {
     const sku = getProductIdFromSpan();
     const affId = getAffiliateIdFromUrl();
@@ -249,7 +249,6 @@ function loadProductData() {
         console.error('ID produk tidak ditemukan!');
     }
 }
-
     // Setup slider untuk produk 1234
     function setupProduct1234Slider() {
         const prevBtn = document.getElementById('product-1234-prev');
