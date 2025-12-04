@@ -1631,11 +1631,7 @@ function setupFullscreenOverlay() {
             const discountLabel = product.discount && product.discount > 0 ? 
                 `<div class="jm-digital-carousel__discount-badge">-${product.discount}%</div>` : '';
             
-            // Product URL - Gunakan linkproduk jika ada
-            let productUrl = `https://www.jejakmufassir.my.id/p/belanja.html?produk=${product.sku}`;
-            
-            // Coba ambil linkproduk dari Firebase
-            if (product.sellerId && product.id) {
+        (product.sellerId && product.id) {
                 const linkRef = firebase.database().ref(`sellers/${product.sellerId}/products/${product.id}/linkproduk`);
                 linkRef.once('value').then((snapshot) => {
                     const linkproduk = snapshot.val();
