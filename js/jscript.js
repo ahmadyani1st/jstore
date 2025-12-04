@@ -36,8 +36,20 @@ function getAffiliateIdFromUrl() {
     return urlParams.get('affid');
 }
 
-// Fungsi utama untuk memuat data produk
-function loadProductData() {
+// FUNGSI BARU: Mengambil linkproduk dari Firebase berdasarkan sellerId dan productId
+async function getProductLink(sellerId, productId) {
+    try {
+        const linkprodukRef = database.ref(`sellers/${sellerId}/products/${productId}/linkproduk`);
+        const snapshot = await linkprodukRef.once('value');
+        return snapshot.val() || null;
+    } catch (error) {
+        console.error("Error fetching product link:", error);
+        return null;
+    }
+}
+
+// Fungsi utama untuk memuat data produk - DIMODIFIKASI
+async function loadProductData() {
     const sku = getProductIdFromSpan();
     const affId = getAffiliateIdFromUrl();
 
@@ -51,196 +63,215 @@ function loadProductData() {
 
         // Lanjutkan dengan memuat data produk
         const productsRef = database.ref('sellers');
-        productsRef.once('value', (snapshot) => {
+        productsRef.once('value', async (snapshot) => {
             let productFound = false;
-            snapshot.forEach((sellerSnapshot) => {
-                const sellerId = sellerSnapshot.key;
-                sellerSnapshot.child('products').forEach((productSnapshot) => {
-                    const product = productSnapshot.val();
-                    if (product.sku === sku) {
-                        productFound = true;
-                        console.log("Product found:", product);
-                        fetchSellerInfo(sellerId);
+            let currentSellerId = null;
+            let currentProductId = null;
+            
+            // Cari produk berdasarkan SKU
+            for (const sellerSnapshot of Object.entries(snapshot.val() || {})) {
+                const sellerId = sellerSnapshot[0];
+                const sellerData = sellerSnapshot[1];
+                
+                if (sellerData.products) {
+                    for (const productKey in sellerData.products) {
+                        const product = sellerData.products[productKey];
+                        if (product.sku === sku) {
+                            productFound = true;
+                            currentSellerId = sellerId;
+                            currentProductId = productKey;
+                            console.log("Product found:", product);
+                            
+                            // DAPATKAN LINKPRODUK - MODIFIKASI BESAR DI SINI
+                            const productLink = await getProductLink(sellerId, productKey);
+                            product.linkproduk = productLink; // Simpan linkproduk di objek produk
+                            
+                            fetchSellerInfo(sellerId);
 
-                        // Load product images - MODIFIKASI UNTUK SLIDER UNIK
-                        const imageSlider = document.getElementById('product-1234-slider');
-                        product1234Slider.images = [];
-                        imageSlider.innerHTML = '';
+                            // Load product images
+                            const imageSlider = document.getElementById('product-1234-slider');
+                            product1234Slider.images = [];
+                            imageSlider.innerHTML = '';
 
-                        const imageUrlsRef = database.ref(`sellers/${sellerId}/products/${productSnapshot.key}/imageUrls`);
-                        imageUrlsRef.once('value', (imageUrlsSnapshot) => {
-                            const imageUrlsData = imageUrlsSnapshot.val();
-                            if (imageUrlsData) {
-                                // Reset array
-                                product1234Slider.images = [];
+                            const imageUrlsRef = database.ref(`sellers/${sellerId}/products/${productKey}/imageUrls`);
+                            imageUrlsRef.once('value', (imageUrlsSnapshot) => {
+                                const imageUrlsData = imageUrlsSnapshot.val();
+                                if (imageUrlsData) {
+                                    // Reset array
+                                    product1234Slider.images = [];
 
-                                // Urutkan berdasarkan key (0, 1, 2, ...)
-                                const sortedUrls = Object.entries(imageUrlsData)
-                                    .sort(([keyA], [keyB]) => parseInt(keyA) - parseInt(keyB))
-                                    .map(([_, url]) => url);
+                                    // Urutkan berdasarkan key (0, 1, 2, ...)
+                                    const sortedUrls = Object.entries(imageUrlsData)
+                                        .sort(([keyA], [keyB]) => parseInt(keyA) - parseInt(keyB))
+                                        .map(([_, url]) => url);
 
-                                sortedUrls.forEach((imageUrl, index) => {
-                                    if (imageUrl) {
-                                        product1234Slider.images.push(imageUrl);
-                                        const img = document.createElement('img');
-                                        img.src = imageUrl;
-                                        img.classList.add('product-1234-slider-image');
-                                        img.alt = `Product image ${index + 1}`;
-                                        img.loading = "lazy";
-                                        imageSlider.appendChild(img);
+                                    sortedUrls.forEach((imageUrl, index) => {
+                                        if (imageUrl) {
+                                            product1234Slider.images.push(imageUrl);
+                                            const img = document.createElement('img');
+                                            img.src = imageUrl;
+                                            img.classList.add('product-1234-slider-image');
+                                            img.alt = `Product image ${index + 1}`;
+                                            img.loading = "lazy";
+                                            imageSlider.appendChild(img);
+                                        }
+                                    });
+
+                                    product1234Slider.totalSlides = product1234Slider.images.length;
+                                    console.log(`Loaded ${product1234Slider.totalSlides} images for product 1234 slider`);
+
+                                    if (product1234Slider.totalSlides > 0) {
+                                        // Setup image popup untuk slider images
+                                        setupSliderImageClickEvents();
+
+                                        // Setup slider navigation
+                                        setupProduct1234Slider();
+
+                                        // Update slider buttons
+                                        updateProduct1234SliderButtons();
                                     }
-                                });
-
-                                product1234Slider.totalSlides = product1234Slider.images.length;
-                                console.log(`Loaded ${product1234Slider.totalSlides} images for product 1234 slider`);
-
-                                if (product1234Slider.totalSlides > 0) {
-                                    // Setup image popup untuk slider images
-                                    setupSliderImageClickEvents();
-
-                                    // Setup slider navigation
-                                    setupProduct1234Slider();
-
-                                    // Update slider buttons
-                                    updateProduct1234SliderButtons();
                                 }
-                            }
-                        });
+                            });
 
-                        // Set product information
-                        if (product.jenisproduk) {
-                            document.getElementById('jenisproduk').textContent = `Jenis Produk: ${product.jenisproduk}`;
-                            document.getElementById('jenisproduk').classList.remove('hidden');
-                            document.getElementById('jenisproduk').parentElement.classList.remove('hidden');
+                            // Set product information
+                            if (product.jenisproduk) {
+                                document.getElementById('jenisproduk').textContent = `Jenis Produk: ${product.jenisproduk}`;
+                                document.getElementById('jenisproduk').classList.remove('hidden');
+                                document.getElementById('jenisproduk').parentElement.classList.remove('hidden');
+                            }
+
+                            if (product.berat) {
+                                document.getElementById('berat').textContent = `Berat Produk: ${product.berat}`;
+                                document.getElementById('berat').classList.remove('hidden');
+                                document.getElementById('berat').parentElement.classList.remove('hidden');
+                            }
+
+                            document.getElementById('product-name').textContent = product.name;
+
+                            // Set product description
+                            const productDescription = document.getElementById('product-description');
+                            const formattedDescription = formatDescription(product.description);
+                            productDescription.innerHTML = `
+                                <div class="description-container">
+                                    <div class="fade-out"></div>
+                                    <div class="description-content">${formattedDescription}</div>
+                                </div>
+                                <div class="read-more-container">
+                                    <span class="read-more">Selengkapnya . . .</span>
+                                </div>
+                            `;
+
+                            const readMoreBtn = productDescription.querySelector('.read-more');
+                            const descriptionContainer = productDescription.querySelector('.description-container');
+                            const fadeOutElement = productDescription.querySelector('.fade-out');
+
+                            readMoreBtn.addEventListener('click', function() {
+                                descriptionContainer.classList.toggle('expanded');
+                                fadeOutElement.classList.toggle('hidden');
+                                this.textContent = descriptionContainer.classList.contains('expanded') ? 'Sembunyikan' : 'Selengkapnya . . .';
+                            });
+
+                            setTimeout(checkDescriptionHeight, 0);
+                            window.addEventListener('resize', checkDescriptionHeight);
+
+                            // Set product price
+                            let basePrice = product.price || 0;
+                            const currentPriceElement = document.getElementById('current-price');
+                            const originalPriceElement = document.getElementById('original-price');
+
+                            if (basePrice === 0 && product.discount === 100) {
+                                currentPriceElement.innerHTML = '<span style="color: red;">Gratis</span>';
+                                originalPriceElement.style.display = 'none';
+                            } else {
+                                currentPriceElement.textContent = `Rp ${basePrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+                                const originalPrice = calculateOriginalPrice(basePrice, product.discount || 0);
+                                originalPriceElement.textContent = `Rp ${originalPrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+                                originalPriceElement.style.display = 'block';
+                            }
+
+                            const soldValue = product.sold !== undefined && product.sold !== "" ? `+${product.sold} Terjual` : "";
+                            document.getElementById('sold').textContent = soldValue;
+
+                            // Update discount badge
+                            if (product.discount && product.discount > 0) {
+                                document.getElementById('product-1234-discount-badge').textContent = `-${product.discount}%`;
+                                document.getElementById('product-1234-discount-badge').style.display = 'block';
+                            }
+
+                            // Load seller city
+                            const cityRef = database.ref(`users/${sellerId}/city`);
+                            cityRef.once('value', (citySnapshot) => {
+                                const fullCity = citySnapshot.val();
+                                if (fullCity) {
+                                    const cityParts = fullCity.split(', ');
+                                    const cityName = cityParts.length > 1 ? cityParts[1] : fullCity;
+                                    const cityElement = document.getElementById('city');
+                                    cityElement.innerHTML = ` ${cityName}`;
+                                    cityElement.dataset.fullCity = fullCity;
+                                }
+                            });
+
+                            // Load seller name
+                            const nameRef = database.ref(`users/${sellerId}/name`);
+                            nameRef.once('value', (nameSnapshot) => {
+                                const sellerName = nameSnapshot.val();
+                                if (sellerName) {
+                                    const nameElement = document.getElementById('seller-name');
+                                    nameElement.textContent = sellerName;
+                                    nameElement.dataset.sellerName = sellerName;
+                                }
+                            });
+
+                            // Load seller coordinates
+                            const koordinatLokasiRef = database.ref(`users/${sellerId}/koordinatLokasi`);
+                            koordinatLokasiRef.once('value', (koordinatLokasiSnapshot) => {
+                                const koordinatLokasi = koordinatLokasiSnapshot.val();
+                                if (koordinatLokasi) {
+                                    const koordinatLokasiElement = document.getElementById('koordinatLokasi');
+                                    koordinatLokasiElement.textContent = koordinatLokasi;
+                                    koordinatLokasiElement.dataset.koordinatLokasi = koordinatLokasi;
+                                }
+                            });
+
+                            // Setup shop link
+                            document.getElementById('shop-link').onclick = () =>
+                                location.href = `https://www.jejakmufassir.my.id/p/informasi-pengguna.html?id=${product.userID}`;
+
+                            // Setup chat link
+                            document.getElementById('chatseller-link').onclick = () =>
+                                location.href = `https://jejakmufassir.my.id/p/chat.html?id=${product.userID}`;
+
+                            // Calculate and update average rating
+                            calculateAndUpdateAverageRating(sku, sellerId, productKey);
+
+                            // Load reviews
+                            getReviewData(sku);
+
+                            // Initialize cart and share buttons
+                            initializeCartButton();
+                            initializeShareButton();
+
+                            // Load product variations
+                            const variationsRef = database.ref(`sellers/${sellerId}/products/${productKey}/variations`);
+                            variationsRef.once('value', (variationsSnapshot) => {
+                                const variations = variationsSnapshot.val();
+                                if (variations) {
+                                    product.variations = variations;
+                                }
+
+                                // Setup click handler untuk tombol beli
+                                document.getElementById('beli-sekarang').onclick = () => {
+                                    showQuantityPopup({...product, imageUrls: product1234Slider.images});
+                                };
+                            });
+                            
+                            break; // Keluar dari loop produk
                         }
-
-                        if (product.berat) {
-                            document.getElementById('berat').textContent = `Berat Produk: ${product.berat}`;
-                            document.getElementById('berat').classList.remove('hidden');
-                            document.getElementById('berat').parentElement.classList.remove('hidden');
-                        }
-
-                        document.getElementById('product-name').textContent = product.name;
-
-                        // Set product description
-                        const productDescription = document.getElementById('product-description');
-                        const formattedDescription = formatDescription(product.description);
-                        productDescription.innerHTML = `
-                            <div class="description-container">
-                                <div class="fade-out"></div>
-                                <div class="description-content">${formattedDescription}</div>
-                            </div>
-                            <div class="read-more-container">
-                                <span class="read-more">Selengkapnya . . .</span>
-                            </div>
-                        `;
-
-                        const readMoreBtn = productDescription.querySelector('.read-more');
-                        const descriptionContainer = productDescription.querySelector('.description-container');
-                        const fadeOutElement = productDescription.querySelector('.fade-out');
-
-                        readMoreBtn.addEventListener('click', function() {
-                            descriptionContainer.classList.toggle('expanded');
-                            fadeOutElement.classList.toggle('hidden');
-                            this.textContent = descriptionContainer.classList.contains('expanded') ? 'Sembunyikan' : 'Selengkapnya . . .';
-                        });
-
-                        setTimeout(checkDescriptionHeight, 0);
-                        window.addEventListener('resize', checkDescriptionHeight);
-
-                        // Set product price
-                        let basePrice = product.price || 0;
-                        const currentPriceElement = document.getElementById('current-price');
-                        const originalPriceElement = document.getElementById('original-price');
-
-                        if (basePrice === 0 && product.discount === 100) {
-                            currentPriceElement.innerHTML = '<span style="color: red;">Gratis</span>';
-                            originalPriceElement.style.display = 'none';
-                        } else {
-                            currentPriceElement.textContent = `Rp ${basePrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
-                            const originalPrice = calculateOriginalPrice(basePrice, product.discount || 0);
-                            originalPriceElement.textContent = `Rp ${originalPrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
-                            originalPriceElement.style.display = 'block';
-                        }
-
-                        const soldValue = product.sold !== undefined && product.sold !== "" ? `+${product.sold} Terjual` : "";
-                        document.getElementById('sold').textContent = soldValue;
-
-                        // Update discount badge
-                        if (product.discount && product.discount > 0) {
-                            document.getElementById('product-1234-discount-badge').textContent = `-${product.discount}%`;
-                            document.getElementById('product-1234-discount-badge').style.display = 'block';
-                        }
-
-                        // Load seller city
-                        const cityRef = database.ref(`users/${sellerId}/city`);
-                        cityRef.once('value', (citySnapshot) => {
-                            const fullCity = citySnapshot.val();
-                            if (fullCity) {
-                                const cityParts = fullCity.split(', ');
-                                const cityName = cityParts.length > 1 ? cityParts[1] : fullCity;
-                                const cityElement = document.getElementById('city');
-                                cityElement.innerHTML = ` ${cityName}`;
-                                cityElement.dataset.fullCity = fullCity;
-                            }
-                        });
-
-                        // Load seller name
-                        const nameRef = database.ref(`users/${sellerId}/name`);
-                        nameRef.once('value', (nameSnapshot) => {
-                            const sellerName = nameSnapshot.val();
-                            if (sellerName) {
-                                const nameElement = document.getElementById('seller-name');
-                                nameElement.textContent = sellerName;
-                                nameElement.dataset.sellerName = sellerName;
-                            }
-                        });
-
-                        // Load seller coordinates
-                        const koordinatLokasiRef = database.ref(`users/${sellerId}/koordinatLokasi`);
-                        koordinatLokasiRef.once('value', (koordinatLokasiSnapshot) => {
-                            const koordinatLokasi = koordinatLokasiSnapshot.val();
-                            if (koordinatLokasi) {
-                                const koordinatLokasiElement = document.getElementById('koordinatLokasi');
-                                koordinatLokasiElement.textContent = koordinatLokasi;
-                                koordinatLokasiElement.dataset.koordinatLokasi = koordinatLokasi;
-                            }
-                        });
-
-                        // Setup shop link
-                        document.getElementById('shop-link').onclick = () =>
-                            location.href = `https://www.jejakmufassir.my.id/p/informasi-pengguna.html?id=${product.userID}`;
-
-                        // Setup chat link
-                        document.getElementById('chatseller-link').onclick = () =>
-                            location.href = `https://jejakmufassir.my.id/p/chat.html?id=${product.userID}`;
-
-                        // Calculate and update average rating
-                        calculateAndUpdateAverageRating(sku, sellerId, productSnapshot.key);
-
-                        // Load reviews
-                        getReviewData(sku);
-
-                        // Initialize cart and share buttons
-                        initializeCartButton();
-                        initializeShareButton();
-
-                        // Load product variations
-                        const variationsRef = database.ref(`sellers/${sellerId}/products/${productSnapshot.key}/variations`);
-                        variationsRef.once('value', (variationsSnapshot) => {
-                            const variations = variationsSnapshot.val();
-                            if (variations) {
-                                product.variations = variations;
-                            }
-
-                            // Setup click handler untuk tombol beli
-                            document.getElementById('beli-sekarang').onclick = () => {
-                                showQuantityPopup({...product, imageUrls: product1234Slider.images});
-                            };
-                        });
                     }
-                });
-            });
+                }
+                if (productFound) break; // Keluar dari loop seller
+            }
+            
             if (!productFound) {
                 console.warn('Produk tidak ditemukan!');
             }
@@ -248,6 +279,176 @@ function loadProductData() {
     } else {
         console.error('ID produk tidak ditemukan!');
     }
+}
+
+// Cart functionality - DIMODIFIKASI untuk menyimpan linkproduk
+function initializeCartButton() {
+    const addToCartBtn = document.getElementById('add-to-cart-btn');
+    const produkId = getProductIdFromSpan();
+
+    console.log("Initializing cart button for product:", produkId);
+
+    function getUid() {
+        return firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
+    }
+
+    function createSvgElement(url) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.width = '24px';
+        img.style.height = '24px';
+        return img;
+    }
+
+    const svgAddToCartUrl = 'https://res.cloudinary.com/jejak-mufassir/image/upload/v1759384267/Icon-icon/love_c1lymg.svg';
+    const svgRemoveFromCartUrl = 'https://res.cloudinary.com/jejak-mufassir/image/upload/v1759384306/Icon-icon/love_red_ejz5d2.svg';
+
+    function updateButtonContent(uid) {
+        if (!uid) {
+            console.error('User is not authenticated');
+            return;
+        }
+
+        const cartRef = firebase.database().ref(`carts/${uid}/${produkId}`);
+        cartRef.once('value', (snapshot) => {
+            addToCartBtn.innerHTML = '';
+            if (snapshot.exists()) {
+                const currentValue = snapshot.val();
+                const svg = createSvgElement(currentValue.status ? svgRemoveFromCartUrl : svgAddToCartUrl);
+                addToCartBtn.appendChild(svg);
+            } else {
+                const svg = createSvgElement(svgAddToCartUrl);
+                addToCartBtn.appendChild(svg);
+            }
+        });
+    }
+
+    // Initialize button state
+    firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+            const uid = user.uid;
+            updateButtonContent(uid);
+        } else {
+            const svg = createSvgElement(svgAddToCartUrl);
+            addToCartBtn.innerHTML = '';
+            addToCartBtn.appendChild(svg);
+        }
+    });
+
+    // Add click event listener - DIMODIFIKASI BESAR DI SINI
+    addToCartBtn.addEventListener('click', async () => {
+        const uid = getUid();
+        if (!uid) {
+            console.error('User is not authenticated');
+            showNotification('Silakan login terlebih dahulu untuk menambahkan ke keranjang', false);
+            return;
+        }
+
+        const cartRef = firebase.database().ref(`carts/${uid}/${produkId}`);
+        const productRef = firebase.database().ref('sellers');
+
+        try {
+            const snapshot = await productRef.once('value');
+            let productData = null;
+            let sellerId = null;
+            let productKey = null;
+            
+            // Cari produk berdasarkan SKU
+            snapshot.forEach((sellerSnapshot) => {
+                sellerSnapshot.child('products').forEach((productSnapshot) => {
+                    const product = productSnapshot.val();
+                    if (product.sku === produkId) {
+                        productData = product;
+                        sellerId = sellerSnapshot.key;
+                        productKey = productSnapshot.key;
+                    }
+                });
+            });
+
+            if (productData && sellerId && productKey) {
+                // DAPATKAN LINKPRODUK DARI FIREBASE
+                const productLink = await getProductLink(sellerId, productKey);
+                
+                const cartSnapshot = await cartRef.once('value');
+                if (cartSnapshot.exists()) {
+                    await cartRef.remove();
+                    const svg = createSvgElement(svgAddToCartUrl);
+                    addToCartBtn.innerHTML = '';
+                    addToCartBtn.appendChild(svg);
+                    showNotification('Produk dihapus dari keranjang', true);
+                } else {
+                    const cartData = {
+                        sku: produkId,
+                        status: true,
+                        category: productData.category,
+                        discount: productData.discount,
+                        name: productData.name,
+                        price: productData.price,
+                        jenisproduk: productData.jenisproduk,
+                        berat: productData.berat,
+                        userID: productData.userID,
+                        imageUrl: productData.imageUrls ? productData.imageUrls[0] : null,
+                        linkproduk: productLink // SIMPAN LINKPRODUK DI CART
+                    };
+
+                    await cartRef.set(cartData);
+                    const svg = createSvgElement(svgRemoveFromCartUrl);
+                    addToCartBtn.innerHTML = '';
+                    addToCartBtn.appendChild(svg);
+                    showNotification('Produk ditambahkan ke keranjang', true);
+                }
+            } else {
+                console.error('Product not found');
+                showNotification('Produk tidak ditemukan', false);
+            }
+        } catch (error) {
+            console.error("Error in cart operation:", error);
+            showNotification('Gagal menambahkan ke keranjang', false);
+        }
+    });
+}
+
+// Fungsi untuk menyimpan data pesanan di cookies - DIMODIFIKASI
+function storeOrderDataInCookies(product, quantity) {
+    const produkCode = getProductIdFromSpan();
+    const affId = getAffiliateIdFromUrl();
+
+    const commissionAmountElement = document.getElementById('commission-amount');
+    const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
+
+    const userIdContainer = document.getElementById('userIdContainer')?.textContent.trim() || '';
+
+    const cookieData = {
+        checkout_key: product.userID,
+        checkout_sku: product.sku,
+        checkout_judul: product.name,
+        checkout_harga: product.price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "."),
+        checkout_berat: product.berat,
+        checkout_jenisproduk: product.jenisproduk,
+        checkout_deskripsi: product.description,
+        checkout_city: document.getElementById('city')?.dataset.fullCity || '',
+        checkout_sellername: document.getElementById('seller-name')?.dataset.sellerName || '',
+        checkout_koordinatLokasi: document.getElementById('koordinatLokasi')?.dataset.koordinatLokasi || '',
+        checkout_quantity: quantity,
+        checkout_color: product.selectedColor || '',
+        checkout_size: product.selectedSize || '',
+        checkout_variation_image: product.selectedImageUrl || product.imageUrls[0],
+        checkout_produkkode: produkCode,
+        checkout_affId: affId,
+        checkout_komisi: commissionAmount,
+        checkout_currentId: userIdContainer,
+        checkout_linkproduk: product.linkproduk || '' // SIMPAN LINKPRODUK DI COOKIES
+    };
+
+    // Store image URLs in cookies
+    product.imageUrls.forEach((url, index) => {
+        cookieData[`checkout_urlgambar${index + 1}`] = url;
+    });
+
+    // Set cookies
+    Object.entries(cookieData).forEach(([key, value]) => {
+        document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
+    });
 }
 
 // Setup slider untuk produk 1234
@@ -685,170 +886,6 @@ function closeQuantityPopup() {
             popup.remove();
         }, 300);
     }
-}
-
-// Fungsi untuk menyimpan data pesanan di cookies
-function storeOrderDataInCookies(product, quantity) {
-    const produkCode = getProductIdFromSpan();
-    const affId = getAffiliateIdFromUrl();
-
-    const commissionAmountElement = document.getElementById('commission-amount');
-    const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
-
-    const userIdContainer = document.getElementById('userIdContainer')?.textContent.trim() || '';
-
-    const cookieData = {
-        checkout_key: product.userID,
-        checkout_sku: product.sku,
-        checkout_judul: product.name,
-        checkout_harga: product.price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "."),
-        checkout_berat: product.berat,
-        checkout_jenisproduk: product.jenisproduk,
-        checkout_deskripsi: product.description,
-        checkout_city: document.getElementById('city')?.dataset.fullCity || '',
-        checkout_sellername: document.getElementById('seller-name')?.dataset.sellerName || '',
-        checkout_koordinatLokasi: document.getElementById('koordinatLokasi')?.dataset.koordinatLokasi || '',
-        checkout_quantity: quantity,
-        checkout_color: product.selectedColor || '',
-        checkout_size: product.selectedSize || '',
-        checkout_variation_image: product.selectedImageUrl || product.imageUrls[0],
-        checkout_produkkode: produkCode,
-        checkout_affId: affId,
-        checkout_komisi: commissionAmount,
-        checkout_currentId: userIdContainer
-    };
-
-    // Store image URLs in cookies
-    product.imageUrls.forEach((url, index) => {
-        cookieData[`checkout_urlgambar${index + 1}`] = url;
-    });
-
-    // Set cookies
-    Object.entries(cookieData).forEach(([key, value]) => {
-        document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
-    });
-}
-
-// Cart functionality
-function initializeCartButton() {
-    const addToCartBtn = document.getElementById('add-to-cart-btn');
-    const produkId = getProductIdFromSpan();
-
-    console.log("Initializing cart button for product:", produkId);
-
-    function getUid() {
-        return firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
-    }
-
-    function createSvgElement(url) {
-        const img = document.createElement('img');
-        img.src = url;
-        img.style.width = '24px';
-        img.style.height = '24px';
-        return img;
-    }
-
-    const svgAddToCartUrl = 'https://res.cloudinary.com/jejak-mufassir/image/upload/v1759384267/Icon-icon/love_c1lymg.svg';
-    const svgRemoveFromCartUrl = 'https://res.cloudinary.com/jejak-mufassir/image/upload/v1759384306/Icon-icon/love_red_ejz5d2.svg';
-
-    function updateButtonContent(uid) {
-        if (!uid) {
-            console.error('User is not authenticated');
-            return;
-        }
-
-        const cartRef = firebase.database().ref(`carts/${uid}/${produkId}`);
-        cartRef.once('value', (snapshot) => {
-            addToCartBtn.innerHTML = '';
-            if (snapshot.exists()) {
-                const currentValue = snapshot.val();
-                const svg = createSvgElement(currentValue.status ? svgRemoveFromCartUrl : svgAddToCartUrl);
-                addToCartBtn.appendChild(svg);
-            } else {
-                const svg = createSvgElement(svgAddToCartUrl);
-                addToCartBtn.appendChild(svg);
-            }
-        });
-    }
-
-    // Initialize button state
-    firebase.auth().onAuthStateChanged((user) => {
-        if (user) {
-            const uid = user.uid;
-            updateButtonContent(uid);
-        } else {
-            const svg = createSvgElement(svgAddToCartUrl);
-            addToCartBtn.innerHTML = '';
-            addToCartBtn.appendChild(svg);
-        }
-    });
-
-    // Add click event listener
-    addToCartBtn.addEventListener('click', () => {
-        const uid = getUid();
-        if (!uid) {
-            console.error('User is not authenticated');
-            showNotification('Silakan login terlebih dahulu untuk menambahkan ke keranjang', false);
-            return;
-        }
-
-        const cartRef = firebase.database().ref(`carts/${uid}/${produkId}`);
-        const productRef = firebase.database().ref(`sellers`);
-
-        productRef.once('value', (snapshot) => {
-            let productData;
-            snapshot.forEach((sellerSnapshot) => {
-                sellerSnapshot.child('products').forEach((productSnapshot) => {
-                    const product = productSnapshot.val();
-                    if (product.sku === produkId) {
-                        productData = product;
-                    }
-                });
-            });
-
-            if (productData) {
-                cartRef.once('value', (snapshot) => {
-                    if (snapshot.exists()) {
-                        cartRef.remove().then(() => {
-                            const svg = createSvgElement(svgAddToCartUrl);
-                            addToCartBtn.innerHTML = '';
-                            addToCartBtn.appendChild(svg);
-                            showNotification('Produk dihapus dari keranjang', true);
-                        }).catch((error) => {
-                            console.error("Error removing from cart:", error);
-                            showNotification('Gagal menghapus dari keranjang', false);
-                        });
-                    } else {
-                        const cartData = {
-                            sku: produkId,
-                            status: true,
-                            category: productData.category,
-                            discount: productData.discount,
-                            name: productData.name,
-                            price: productData.price,
-                            jenisproduk: productData.jenisproduk,
-                            berat: productData.berat,
-                            userID: productData.userID,
-                            imageUrl: productData.imageUrls ? productData.imageUrls[0] : null
-                        };
-
-                        cartRef.set(cartData).then(() => {
-                            const svg = createSvgElement(svgRemoveFromCartUrl);
-                            addToCartBtn.innerHTML = '';
-                            addToCartBtn.appendChild(svg);
-                            showNotification('Produk ditambahkan ke keranjang', true);
-                        }).catch((error) => {
-                            console.error("Error adding to cart:", error);
-                            showNotification('Gagal menambahkan ke keranjang', false);
-                        });
-                    }
-                });
-            } else {
-                console.error('Product not found');
-                showNotification('Produk tidak ditemukan', false);
-            }
-        });
-    });
 }
 
 // Fungsi untuk menampilkan notifikasi
@@ -1333,7 +1370,7 @@ function setupFullscreenOverlay() {
     }
 }
 
-// Digital carousel functionality - MODIFIKASI BESAR DI SINI
+// Digital carousel functionality
 (function() {
     const JMDigitalCarousel = {};
 
@@ -1420,7 +1457,7 @@ function setupFullscreenOverlay() {
         });
     };
 
-    // Fungsi baru untuk mendapatkan linkproduk dari Firebase
+    // Fungsi untuk mendapatkan linkproduk dari Firebase
     JMDigitalCarousel.getProductLink = function(sellerId, productId) {
         return new Promise((resolve) => {
             const linkprodukRef = JMDigitalCarousel.database.ref(`sellers/${sellerId}/products/${productId}/linkproduk`);
@@ -1600,8 +1637,7 @@ function setupFullscreenOverlay() {
             const discountLabel = product.discount && product.discount > 0 ? 
                 `<div class="jm-digital-carousel__discount-badge">-${product.discount}%</div>` : '';
             
-            // Gunakan linkproduk dari Firebase, bukan URL tetap
-            // Jika tidak ada linkproduk, produk tidak akan ditampilkan (karena sudah difilter sebelumnya)
+            // Gunakan linkproduk dari Firebase
             const productUrl = product.linkproduk;
             
             // Truncate product name (20 characters)
