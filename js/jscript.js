@@ -1,7 +1,4 @@
-Kamu adalah programmer handal, saya ingin kamu bantu saya agar jika user klik gambar produk atau judul produknya malah user diarahkan ke linkurl sesuai dengan data path sellers/${sellerId}/products/${productId}/linkproduk, Kirim script lengkapnya menyeluruh! Jika tidak ada, maka jangan tampilkan produknya, jadi hanya produk yang ada linkproduk saja!
-jangan _blank linknya atau jangan buka tab baru! kirim secara menyeluruh script pembaharuannya lengkap!
-
-  // Firebase configuration
+// Firebase configuration
     const firebaseConfig = {
         apiKey: "AIzaSyCrdGHXxVKQ2BiU6___9fOqVDwIECLq8pk",
         authDomain: "jejak-mufassir.firebaseapp.com",
