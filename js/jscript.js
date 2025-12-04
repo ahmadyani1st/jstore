@@ -1,4 +1,4 @@
-`// Firebase configuration
+// Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyCrdGHXxVKQ2BiU6___9fOqVDwIECLq8pk",
     authDomain: "jejak-mufassir.firebaseapp.com",
@@ -829,7 +829,6 @@ function initializeCartButton() {
                             jenisproduk: productData.jenisproduk,
                             berat: productData.berat,
                             userID: productData.userID,
-                            
                             imageUrl: productData.imageUrls ? productData.imageUrls[0] : null
                         };
 
