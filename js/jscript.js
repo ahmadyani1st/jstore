@@ -829,7 +829,7 @@ function initializeCartButton() {
                             jenisproduk: productData.jenisproduk,
                             berat: productData.berat,
                             userID: productData.userID,
-                            linkproduk: productData.linkproduk,
+                            
                             imageUrl: productData.imageUrls ? productData.imageUrls[0] : null
                         };
 
