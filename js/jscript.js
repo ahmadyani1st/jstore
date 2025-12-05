@@ -30,10 +30,66 @@ function getProductIdFromSpan() {
     return productSpan ? productSpan.textContent.trim() : null;
 }
 
-// Fungsi untuk mengambil affiliate ID dari URL (jika ada)
+// FUNGSI BARU: Mengambil affiliate ID dari URL parameter 'affId'
 function getAffiliateIdFromUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('affid');
+    return urlParams.get('affId'); // Perhatikan: 'affId' bukan 'affid'
+}
+
+// FUNGSI BARU: Mengambil affiliate ID dari cookies
+function getAffiliateIdFromCookies() {
+    const name = 'affId' + '=';
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const ca = decodedCookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) === 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return '';
+}
+
+// FUNGSI BARU: Menyimpan affiliate ID ke cookies
+function saveAffiliateIdToCookies(affId) {
+    if (affId && affId.trim() !== '') {
+        document.cookie = `affId=${affId}; path=/; max-age=2592000`; // 30 hari
+        console.log("Affiliate ID saved to cookies:", affId);
+    }
+}
+
+// FUNGSI BARU: Memperbarui span dengan affiliate ID
+function updateAffiliateIdSpan(affId) {
+    const affIdSpan = document.getElementById('affId');
+    if (affIdSpan) {
+        affIdSpan.textContent = affId || '';
+        console.log("Affiliate ID span updated with:", affId || '(empty)');
+    }
+}
+
+// FUNGSI BARU: Inisialisasi sistem affiliate ID
+function initializeAffiliateIdSystem() {
+    // 1. Ambil affiliate ID dari URL
+    const urlAffId = getAffiliateIdFromUrl();
+    
+    // 2. Jika ada affiliate ID di URL, simpan ke cookies
+    if (urlAffId && urlAffId.trim() !== '') {
+        saveAffiliateIdToCookies(urlAffId);
+    }
+    
+    // 3. Ambil affiliate ID dari cookies (baik yang baru disimpan atau yang sudah ada)
+    const cookieAffId = getAffiliateIdFromCookies();
+    
+    // 4. Perbarui span dengan affiliate ID
+    updateAffiliateIdSpan(cookieAffId);
+    
+    console.log("Affiliate ID System Initialized:");
+    console.log("- From URL:", urlAffId || '(empty)');
+    console.log("- From Cookies:", cookieAffId || '(empty)');
+    console.log("- Final affiliate ID:", cookieAffId || '(empty)');
 }
 
 // FUNGSI BARU: Mengambil linkproduk dari Firebase berdasarkan sellerId dan productId
@@ -120,17 +176,14 @@ function stripHtmlTags(html) {
 
 // Fungsi utama untuk memuat data produk - DIMODIFIKASI
 async function loadProductData() {
+    // Inisialisasi sistem affiliate ID terlebih dahulu
+    initializeAffiliateIdSystem();
+    
     const sku = getProductIdFromSpan();
-    const affId = getAffiliateIdFromUrl();
-
+    
     console.log("Loading product data for SKU:", sku);
 
     if (sku) {
-        // Simpan affiliate ID di cookie jika ada
-        if (affId) {
-            document.cookie = `affId=${affId}; path=/`;
-        }
-
         // Cari informasi seller dan produk
         const { sellerId, productKey, productData } = await findSellerAndProductBySku(sku);
         
@@ -470,10 +523,12 @@ function initializeCartButton(productData = null) {
     });
 }
 
-// Fungsi untuk menyimpan data pesanan di cookies - DIMODIFIKASI
+// Fungsi untuk menyimpan data pesanan di cookies - DIMODIFIKASI untuk affiliate ID
 function storeOrderDataInCookies(product, quantity) {
     const produkCode = getProductIdFromSpan();
-    const affId = getAffiliateIdFromUrl();
+    
+    // DAPATKAN AFFILIATE ID DARI COOKIES (bukan dari URL lagi)
+    const affId = getAffiliateIdFromCookies();
 
     const commissionAmountElement = document.getElementById('commission-amount');
     const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
@@ -496,7 +551,7 @@ function storeOrderDataInCookies(product, quantity) {
         checkout_size: product.selectedSize || '',
         checkout_variation_image: product.selectedImageUrl || product.imageUrls[0],
         checkout_produkkode: produkCode,
-        checkout_affId: affId,
+        checkout_affId: affId, // Simpan affiliate ID dari cookies
         checkout_komisi: commissionAmount,
         checkout_currentId: userIdContainer,
         checkout_linkproduk: product.linkproduk || '' // SIMPAN LINKPRODUK DI COOKIES
@@ -511,6 +566,8 @@ function storeOrderDataInCookies(product, quantity) {
     Object.entries(cookieData).forEach(([key, value]) => {
         document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
     });
+    
+    console.log("Order data saved to cookies with affiliate ID:", affId || '(empty)');
 }
 
 // Setup slider untuk produk 1234
@@ -1020,11 +1077,14 @@ async function getCompleteProductData(productId) {
     }
 }
 
-// MODIFIKASI BESAR: Fungsi generateShortUrl yang diperbarui
-async function generateShortUrl(productId, affId = '') {
+// MODIFIKASI BESAR: Fungsi generateShortUrl yang diperbarui dengan affiliate ID
+async function generateShortUrl(productId) {
     const shortUrlsRef = firebase.database().ref('shortUrls');
     
     try {
+        // Dapatkan affiliate ID dari cookies
+        const affId = getAffiliateIdFromCookies();
+        
         // First, check if a short URL already exists for this combination
         const existingUrlSnapshot = await shortUrlsRef
             .orderByChild('productId')
@@ -1043,7 +1103,7 @@ async function generateShortUrl(productId, affId = '') {
         // Data yang akan disimpan di shortURL
         const urlData = {
             productId: productId,
-            affId: affId,
+            affId: affId || '', // Simpan affiliate ID (bisa kosong)
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             title: productData.title,
             description: productData.description, // Sekarang dalam format teks biasa
@@ -1052,33 +1112,17 @@ async function generateShortUrl(productId, affId = '') {
         };
         
         if (existingUrls) {
-            // Untuk non-authenticated users atau tanpa affId, cari existing productId tanpa affId
-            if (!affId) {
-                for (const [shortCode, urlData] of Object.entries(existingUrls)) {
-                    if (!urlData.affId || urlData.affId === '') {
-                        // Update data dengan informasi tambahan
-                        await shortUrlsRef.child(shortCode).update({
-                            title: productData.title,
-                            description: productData.description, // Teks biasa
-                            image: productData.image,
-                            linkproduk: productData.linkproduk
-                        });
-                        return `https://s.jejakmufassir.my.id/${shortCode}`;
-                    }
-                }
-            } else {
-                // Untuk authenticated users, cari yang matching affId
-                for (const [shortCode, urlData] of Object.entries(existingUrls)) {
-                    if (urlData.affId === affId) {
-                        // Update data dengan informasi tambahan
-                        await shortUrlsRef.child(shortCode).update({
-                            title: productData.title,
-                            description: productData.description, // Teks biasa
-                            image: productData.image,
-                            linkproduk: productData.linkproduk
-                        });
-                        return `https://s.jejakmufassir.my.id/${shortCode}`;
-                    }
+            // Cari existing URL dengan affiliate ID yang sama
+            for (const [shortCode, existingData] of Object.entries(existingUrls)) {
+                if (existingData.affId === affId || (!existingData.affId && !affId)) {
+                    // Update data dengan informasi tambahan
+                    await shortUrlsRef.child(shortCode).update({
+                        title: productData.title,
+                        description: productData.description,
+                        image: productData.image,
+                        linkproduk: productData.linkproduk
+                    });
+                    return `https://s.jejakmufassir.my.id/${shortCode}`;
                 }
             }
         }
@@ -1112,50 +1156,10 @@ function initializeShareButton() {
         return `https://s.jejakmufassir.my.id/p/belanja.html?produk=${productId}`;
     }
 
-    // Updated getShareLink function
+    // Updated getShareLink function dengan affiliate ID
     async function getShareLink(productId) {
-        const currentUser = firebase.auth().currentUser;
-
-        // If no user is logged in, generate short URL without affId
-        if (!currentUser) {
-            return await generateShortUrl(productId, '');
-        }
-
-        try {
-            // Get user's affiliate ID
-            const userRef = firebase.database().ref(`users/${currentUser.uid}/id`);
-            const userSnapshot = await userRef.once('value');
-            const userId = userSnapshot.val();
-
-            if (!userId) {
-                return await generateShortUrl(productId, '');
-            }
-
-            // Get product seller ID
-            const productRef = firebase.database().ref('sellers');
-            const productSnapshot = await productRef.once('value');
-            let sellerUserId = null;
-
-            productSnapshot.forEach((sellerSnapshot) => {
-                sellerSnapshot.child('products').forEach((productSnapshot) => {
-                    const product = productSnapshot.val();
-                    if (product.sku === productId) {
-                        sellerUserId = product.userID;
-                    }
-                });
-            });
-
-            // If user is the seller, generate short URL without affId
-            if (userId === sellerUserId) {
-                return await generateShortUrl(productId, '');
-            }
-
-            // Generate or get existing short URL with affiliate ID
-            return await generateShortUrl(productId, currentUser.uid);
-        } catch (error) {
-            console.error('Error generating share link:', error);
-            return await generateShortUrl(productId, '');
-        }
+        // Selalu generate short URL dengan affiliate ID dari cookies
+        return await generateShortUrl(productId);
     }
 
     // Initialize share button UI
