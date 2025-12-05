@@ -471,9 +471,22 @@ function initializeCartButton(productData = null) {
 }
 
 // Fungsi untuk menyimpan data pesanan di cookies - DIMODIFIKASI
+// Fungsi untuk menyimpan data pesanan di cookies - DIPERBAIKI
 function storeOrderDataInCookies(product, quantity) {
     const produkCode = getProductIdFromSpan();
-    const affId = getURLParameter('affId'); // Ambil nilai dari parameter 'affId' di URL
+    
+    // AMBIL AFFID DARI URL ATAU COOKIES - PERBAIKAN DI SINI
+    let affId = getAffiliateIdFromUrl(); // Ambil dari parameter URL 'affid'
+    
+    // Jika tidak ada di URL, coba ambil dari cookies
+    if (!affId) {
+        const cookies = document.cookie.split(';');
+        const affIdCookie = cookies.find(cookie => cookie.trim().startsWith('affId='));
+        if (affIdCookie) {
+            affId = affIdCookie.split('=')[1];
+        }
+    }
+    
     const commissionAmountElement = document.getElementById('commission-amount');
     const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
 
@@ -495,10 +508,10 @@ function storeOrderDataInCookies(product, quantity) {
         checkout_size: product.selectedSize || '',
         checkout_variation_image: product.selectedImageUrl || product.imageUrls[0],
         checkout_produkkode: produkCode,
-        checkout_affId: affId,
+        checkout_affId: affId || '', // Simpan affId (bisa string kosong jika tidak ada)
         checkout_komisi: commissionAmount,
         checkout_currentId: userIdContainer,
-        checkout_linkproduk: product.linkproduk || '' // SIMPAN LINKPRODUK DI COOKIES
+        checkout_linkproduk: product.linkproduk || ''
     };
 
     // Store image URLs in cookies
@@ -510,8 +523,11 @@ function storeOrderDataInCookies(product, quantity) {
     Object.entries(cookieData).forEach(([key, value]) => {
         document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
     });
+    
+    // Debug log untuk memastikan affId tersimpan
+    console.log("AffId stored in cookies:", affId);
+    console.log("All cookies set:", cookieData);
 }
-
 // Setup slider untuk produk 1234
 function setupProduct1234Slider() {
     const prevBtn = document.getElementById('product-1234-prev');
