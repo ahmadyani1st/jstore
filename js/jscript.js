@@ -932,7 +932,119 @@ function showNotification(message, isSuccess) {
     }, 3000);
 }
 
-// Share button functionality
+// MODIFIKASI BESAR: Fungsi untuk mendapatkan data produk lengkap untuk shortURL
+async function getCompleteProductData(productId) {
+    try {
+        const { sellerId, productKey, productData } = await findSellerAndProductBySku(productId);
+        
+        if (!sellerId || !productKey || !productData) {
+            console.warn('Produk tidak ditemukan untuk shortURL:', productId);
+            return null;
+        }
+        
+        // Dapatkan linkproduk
+        const linkproduk = await getProductLink(sellerId, productKey);
+        
+        // Dapatkan gambar pertama
+        let image = '';
+        const imageUrlsRef = database.ref(`sellers/${sellerId}/products/${productKey}/imageUrls/0`);
+        const imageSnapshot = await imageUrlsRef.once('value');
+        if (imageSnapshot.exists()) {
+            image = imageSnapshot.val();
+        }
+        
+        // Format description
+        const description = productData.description || '';
+        
+        return {
+            productId: productId,
+            title: productData.name || '',
+            description: description,
+            image: image,
+            linkproduk: linkproduk || ''
+        };
+    } catch (error) {
+        console.error("Error getting complete product data:", error);
+        return null;
+    }
+}
+
+// MODIFIKASI BESAR: Fungsi generateShortUrl yang diperbarui
+async function generateShortUrl(productId, affId = '') {
+    const shortUrlsRef = firebase.database().ref('shortUrls');
+    
+    try {
+        // First, check if a short URL already exists for this combination
+        const existingUrlSnapshot = await shortUrlsRef
+            .orderByChild('productId')
+            .equalTo(productId)
+            .once('value');
+        
+        const existingUrls = existingUrlSnapshot.val();
+        
+        // Dapatkan data produk lengkap
+        const productData = await getCompleteProductData(productId);
+        
+        if (!productData) {
+            throw new Error('Product data not found');
+        }
+        
+        // Data yang akan disimpan di shortURL
+        const urlData = {
+            productId: productId,
+            affId: affId,
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            title: productData.title,
+            description: productData.description,
+            image: productData.image,
+            linkproduk: productData.linkproduk
+        };
+        
+        if (existingUrls) {
+            // Untuk non-authenticated users atau tanpa affId, cari existing productId tanpa affId
+            if (!affId) {
+                for (const [shortCode, urlData] of Object.entries(existingUrls)) {
+                    if (!urlData.affId || urlData.affId === '') {
+                        // Update data dengan informasi tambahan
+                        await shortUrlsRef.child(shortCode).update({
+                            title: productData.title,
+                            description: productData.description,
+                            image: productData.image,
+                            linkproduk: productData.linkproduk
+                        });
+                        return `https://jejakmufassir.my.id/${shortCode}`;
+                    }
+                }
+            } else {
+                // Untuk authenticated users, cari yang matching affId
+                for (const [shortCode, urlData] of Object.entries(existingUrls)) {
+                    if (urlData.affId === affId) {
+                        // Update data dengan informasi tambahan
+                        await shortUrlsRef.child(shortCode).update({
+                            title: productData.title,
+                            description: productData.description,
+                            image: productData.image,
+                            linkproduk: productData.linkproduk
+                        });
+                        return `https://jejakmufassir.my.id/${shortCode}`;
+                    }
+                }
+            }
+        }
+        
+        // Jika tidak ada existing URL, buat yang baru
+        const shortCode = Math.random().toString(36).substring(2, 8);
+        
+        await shortUrlsRef.child(shortCode).set(urlData);
+        return `https://jejakmufassir.my.id/${shortCode}`;
+        
+    } catch (error) {
+        console.error('Error with short URL:', error);
+        return getNormalUrl(productId);
+    }
+}
+
+// Share button functionality - DIMODIFIKASI
 function initializeShareButton() {
     const shareButton = document.getElementById('share-button');
     const svgShareUrl = 'https://res.cloudinary.com/jejak-mufassir/image/upload/v1759384356/Icon-icon/share_ynkrjy.svg';
@@ -947,55 +1059,6 @@ function initializeShareButton() {
     // Function to get normal URL
     function getNormalUrl(productId) {
         return `https://www.jejakmufassir.my.id/p/belanja.html?produk=${productId}`;
-    }
-
-    // Modified short URL generation function
-    async function generateShortUrl(productId, affId = '') {
-        const shortUrlsRef = firebase.database().ref('shortUrls');
-        
-        try {
-            // First, check if a short URL already exists for this combination
-            const existingUrlSnapshot = await shortUrlsRef
-                .orderByChild('productId')
-                .equalTo(productId)
-                .once('value');
-            
-            const existingUrls = existingUrlSnapshot.val();
-            
-            if (existingUrls) {
-                // For non-authenticated users or no affId, look for existing productId without affId
-                if (!affId) {
-                    for (const [shortCode, urlData] of Object.entries(existingUrls)) {
-                        if (!urlData.affId || urlData.affId === '') {
-                            return `https://jejakmufassir.my.id/${shortCode}`;
-                        }
-                    }
-                } else {
-                    // For authenticated users, look for matching affId
-                    for (const [shortCode, urlData] of Object.entries(existingUrls)) {
-                        if (urlData.affId === affId) {
-                            return `https://jejakmufassir.my.id/${shortCode}`;
-                        }
-                    }
-                }
-            }
-            
-            // If no existing URL found, create new one
-            const shortCode = Math.random().toString(36).substring(2, 8);
-            
-            const urlData = {
-                productId: productId,
-                affId: affId,
-                createdAt: firebase.database.ServerValue.TIMESTAMP
-            };
-            
-            await shortUrlsRef.child(shortCode).set(urlData);
-            return `https://jejakmufassir.my.id/${shortCode}`;
-            
-        } catch (error) {
-            console.error('Error with short URL:', error);
-            return getNormalUrl(productId);
-        }
     }
 
     // Updated getShareLink function
