@@ -36,76 +36,29 @@ function getAffiliateIdFromUrl() {
     return urlParams.get('affId'); // Perhatikan: 'affId' bukan 'affid'
 }
 
-// FUNGSI BARU: Mendapatkan timestamp saat ini dalam detik
-function getCurrentTimestamp() {
-    return Math.floor(Date.now() / 1000);
-}
-
-// FUNGSI BARU: Mengambil affiliate ID dari cookies dengan masa berlaku 7 hari
+// FUNGSI BARU: Mengambil affiliate ID dari cookies
 function getAffiliateIdFromCookies() {
     const name = 'affId' + '=';
     const decodedCookie = decodeURIComponent(document.cookie);
     const ca = decodedCookie.split(';');
-    
     for(let i = 0; i < ca.length; i++) {
         let c = ca[i];
         while (c.charAt(0) === ' ') {
             c = c.substring(1);
         }
         if (c.indexOf(name) === 0) {
-            const cookieValue = c.substring(name.length, c.length);
-            
-            // Cek apakah cookie memiliki format dengan timestamp
-            if (cookieValue.includes('|')) {
-                const parts = cookieValue.split('|');
-                const affId = parts[0];
-                const expiryTimestamp = parseInt(parts[1]);
-                const currentTimestamp = getCurrentTimestamp();
-                
-                // Jika masih berlaku (masih dalam 7 hari)
-                if (expiryTimestamp > currentTimestamp) {
-                    console.log("Affiliate ID masih berlaku:", affId, 
-                              "Sisa waktu:", expiryTimestamp - currentTimestamp, "detik");
-                    return affId;
-                } else {
-                    // Jika sudah expired, hapus cookie
-                    console.log("Affiliate ID sudah expired:", affId);
-                    deleteAffiliateIdCookie();
-                    return '';
-                }
-            } else {
-                // Format lama (tanpa timestamp), anggap expired
-                deleteAffiliateIdCookie();
-                return '';
-            }
+            return c.substring(name.length, c.length);
         }
     }
     return '';
 }
 
-// FUNGSI BARU: Menyimpan affiliate ID ke cookies dengan masa berlaku 7 hari
+// FUNGSI BARU: Menyimpan affiliate ID ke cookies
 function saveAffiliateIdToCookies(affId) {
     if (affId && affId.trim() !== '') {
-        // Hitung expiry timestamp (7 hari dari sekarang dalam detik)
-        const expiryTimestamp = getCurrentTimestamp() + (7 * 24 * 60 * 60); // 7 hari
-        
-        // Format: affId|expiryTimestamp
-        const cookieValue = `${affId}|${expiryTimestamp}`;
-        
-        // Simpan cookie dengan path=/ dan masa berlaku 7 hari
-        const expiryDate = new Date();
-        expiryDate.setTime(expiryDate.getTime() + (7 * 24 * 60 * 60 * 1000));
-        const expires = "expires=" + expiryDate.toUTCString();
-        
-        document.cookie = `affId=${cookieValue}; ${expires}; path=/`;
-        console.log("Affiliate ID saved to cookies:", affId, "Expires in 7 days");
+        document.cookie = `affId=${affId}; path=/; // 30 hari
+        console.log("Affiliate ID saved to cookies:", affId);
     }
-}
-
-// FUNGSI BARU: Menghapus affiliate ID cookie
-function deleteAffiliateIdCookie() {
-    document.cookie = "affId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    console.log("Affiliate ID cookie deleted");
 }
 
 // FUNGSI BARU: Memperbarui span dengan affiliate ID
@@ -117,55 +70,26 @@ function updateAffiliateIdSpan(affId) {
     }
 }
 
-// FUNGSI BARU: Inisialisasi sistem affiliate ID yang lebih canggih
+// FUNGSI BARU: Inisialisasi sistem affiliate ID
 function initializeAffiliateIdSystem() {
-    // 1. Ambil affiliate ID dari URL (jika ada)
+    // 1. Ambil affiliate ID dari URL
     const urlAffId = getAffiliateIdFromUrl();
     
-    // 2. Ambil affiliate ID dari cookies (jika ada dan masih berlaku)
-    const cookieAffId = getAffiliateIdFromCookies();
-    
-    // 3. LOGIKA UTAMA: Atur prioritas penyimpanan affiliate ID
+    // 2. Jika ada affiliate ID di URL, simpan ke cookies
     if (urlAffId && urlAffId.trim() !== '') {
-        // Jika ada affiliate ID di URL, SELALU timpa/update affiliate ID di cookies
-        console.log("URL memiliki affiliate ID:", urlAffId);
-        console.log("Cookie saat ini:", cookieAffId || '(empty)');
-        
-        // Periksa apakah affiliate ID di URL berbeda dengan yang di cookies
-        if (urlAffId !== cookieAffId) {
-            console.log("Affiliate ID berbeda, mengupdate dengan yang baru:", urlAffId);
-            saveAffiliateIdToCookies(urlAffId);
-        } else {
-            console.log("Affiliate ID sama, memperpanjang masa berlaku");
-            saveAffiliateIdToCookies(urlAffId); // Tetap simpan untuk memperpanjang masa berlaku
-        }
-        
-        // Gunakan affiliate ID dari URL
-        updateAffiliateIdSpan(urlAffId);
-        console.log("Final affiliate ID (from URL):", urlAffId);
-        
-    } else {
-        // Jika tidak ada affiliate ID di URL
-        console.log("Tidak ada affiliate ID di URL");
-        
-        if (cookieAffId && cookieAffId.trim() !== '') {
-            // Gunakan affiliate ID dari cookies (jika masih berlaku)
-            console.log("Menggunakan affiliate ID dari cookies:", cookieAffId);
-            updateAffiliateIdSpan(cookieAffId);
-            console.log("Final affiliate ID (from cookies):", cookieAffId);
-        } else {
-            // Tidak ada affiliate ID sama sekali
-            console.log("Tidak ada affiliate ID yang berlaku");
-            updateAffiliateIdSpan('');
-            console.log("Final affiliate ID: (empty)");
-        }
+        saveAffiliateIdToCookies(urlAffId);
     }
     
-    // Log informasi tambahan
-    console.log("Affiliate ID System Summary:");
-    console.log("- URL Affiliate ID:", urlAffId || '(empty)');
-    console.log("- Cookie Affiliate ID:", cookieAffId || '(empty)');
-    console.log("- Final Span Value:", document.getElementById('affId')?.textContent || '(empty)');
+    // 3. Ambil affiliate ID dari cookies (baik yang baru disimpan atau yang sudah ada)
+    const cookieAffId = getAffiliateIdFromCookies();
+    
+    // 4. Perbarui span dengan affiliate ID
+    updateAffiliateIdSpan(cookieAffId);
+    
+    console.log("Affiliate ID System Initialized:");
+    console.log("- From URL:", urlAffId || '(empty)');
+    console.log("- From Cookies:", cookieAffId || '(empty)');
+    console.log("- Final affiliate ID:", cookieAffId || '(empty)');
 }
 
 // FUNGSI BARU: Mengambil linkproduk dari Firebase berdasarkan sellerId dan productId
@@ -603,7 +527,7 @@ function initializeCartButton(productData = null) {
 function storeOrderDataInCookies(product, quantity) {
     const produkCode = getProductIdFromSpan();
     
-    // DAPATKAN AFFILIATE ID DARI COOKIES (yang masih berlaku 7 hari)
+    // DAPATKAN AFFILIATE ID DARI COOKIES (bukan dari URL lagi)
     const affId = getAffiliateIdFromCookies();
 
     const commissionAmountElement = document.getElementById('commission-amount');
@@ -638,22 +562,12 @@ function storeOrderDataInCookies(product, quantity) {
         cookieData[`checkout_urlgambar${index + 1}`] = url;
     });
 
-    // Set cookies (semua checkout data kecuali affId akan expired saat session berakhir)
+    // Set cookies
     Object.entries(cookieData).forEach(([key, value]) => {
-        if (key === 'checkout_affId') {
-            // checkout_affId diambil dari cookie affId yang sudah ada dengan masa berlaku 7 hari
-            // Tidak perlu set ulang, gunakan yang sudah ada
-            console.log("checkout_affId akan menggunakan nilai dari cookie affId:", affId);
-        } else {
-            // Data checkout lainnya akan expired saat session berakhir
-            document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
-        }
+        document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
     });
     
-    console.log("Order data saved to cookies:");
-    console.log("- Product:", product.name);
-    console.log("- Affiliate ID:", affId || '(empty)');
-    console.log("- Product Code:", produkCode);
+    console.log("Order data saved to cookies with affiliate ID:", affId || '(empty)');
 }
 
 // Setup slider untuk produk 1234
