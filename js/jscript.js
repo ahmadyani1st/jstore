@@ -84,6 +84,40 @@ async function findSellerAndProductBySku(sku) {
     }
 }
 
+// Fungsi untuk membersihkan HTML menjadi teks biasa
+function stripHtmlTags(html) {
+    if (!html) return '';
+    
+    // Ganti tag <br> dengan newline
+    let text = html.replace(/<br\s*\/?>/gi, '\n');
+    
+    // Ganti tag <p> dengan newline ganda
+    text = text.replace(/<p\b[^>]*>/gi, '\n\n');
+    text = text.replace(/<\/p>/gi, '');
+    
+    // Ganti tag <h1>-<h6> dengan newline dan teks tebal (simbol)
+    text = text.replace(/<h[1-6]\b[^>]*>(.*?)<\/h[1-6]>/gi, '\n\n**$1**\n');
+    
+    // Hapus semua tag HTML lainnya
+    text = text.replace(/<[^>]+>/g, '');
+    
+    // Decode HTML entities
+    const textArea = document.createElement('textarea');
+    textArea.innerHTML = text;
+    text = textArea.value;
+    
+    // Bersihkan spasi berlebihan
+    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    text = text.replace(/^\s+|\s+$/g, '');
+    
+    // Potong teks jika terlalu panjang (maksimal 1000 karakter untuk shortURL)
+    if (text.length > 1000) {
+        text = text.substring(0, 997) + '...';
+    }
+    
+    return text;
+}
+
 // Fungsi utama untuk memuat data produk - DIMODIFIKASI
 async function loadProductData() {
     const sku = getProductIdFromSpan();
@@ -615,7 +649,7 @@ function calculateOriginalPrice(currentPrice, discountPercent) {
     return Math.round(currentPrice / (1 - (discountPercent / 100)));
 }
 
-// Fungsi untuk memformat deskripsi
+// Fungsi untuk memformat deskripsi (untuk tampilan di halaman)
 function formatDescription(description) {
     if (!description) return '';
     
@@ -624,6 +658,23 @@ function formatDescription(description) {
     } catch (e) {
         let fixedDescription = description.replace(/%(?![0-9A-Fa-f]{2})/g, '%25');
         return decodeURIComponent(fixedDescription).replace(/\n/g, '<br>');
+    }
+}
+
+// Fungsi untuk mendapatkan deskripsi dalam format teks biasa (untuk shortURL)
+function getPlainTextDescription(description) {
+    if (!description) return '';
+    
+    try {
+        // Decode URI component dulu
+        let decodedDesc = decodeURIComponent(description);
+        
+        // Panggil fungsi stripHtmlTags untuk membersihkan HTML
+        return stripHtmlTags(decodedDesc);
+    } catch (e) {
+        let fixedDescription = description.replace(/%(?![0-9A-Fa-f]{2})/g, '%25');
+        let decodedDesc = decodeURIComponent(fixedDescription);
+        return stripHtmlTags(decodedDesc);
     }
 }
 
@@ -953,8 +1004,8 @@ async function getCompleteProductData(productId) {
             image = imageSnapshot.val();
         }
         
-        // Format description
-        const description = productData.description || '';
+        // Dapatkan deskripsi dalam format teks biasa (tanpa HTML)
+        const description = getPlainTextDescription(productData.description || '');
         
         return {
             productId: productId,
@@ -995,7 +1046,7 @@ async function generateShortUrl(productId, affId = '') {
             affId: affId,
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             title: productData.title,
-            description: productData.description,
+            description: productData.description, // Sekarang dalam format teks biasa
             image: productData.image,
             linkproduk: productData.linkproduk
         };
@@ -1008,11 +1059,11 @@ async function generateShortUrl(productId, affId = '') {
                         // Update data dengan informasi tambahan
                         await shortUrlsRef.child(shortCode).update({
                             title: productData.title,
-                            description: productData.description,
+                            description: productData.description, // Teks biasa
                             image: productData.image,
                             linkproduk: productData.linkproduk
                         });
-                        return `https://jejakmufassir.my.id/${shortCode}`;
+                        return `https://s.jejakmufassir.my.id/${shortCode}`;
                     }
                 }
             } else {
@@ -1022,11 +1073,11 @@ async function generateShortUrl(productId, affId = '') {
                         // Update data dengan informasi tambahan
                         await shortUrlsRef.child(shortCode).update({
                             title: productData.title,
-                            description: productData.description,
+                            description: productData.description, // Teks biasa
                             image: productData.image,
                             linkproduk: productData.linkproduk
                         });
-                        return `https://jejakmufassir.my.id/${shortCode}`;
+                        return `https://s.jejakmufassir.my.id/${shortCode}`;
                     }
                 }
             }
@@ -1036,7 +1087,7 @@ async function generateShortUrl(productId, affId = '') {
         const shortCode = Math.random().toString(36).substring(2, 8);
         
         await shortUrlsRef.child(shortCode).set(urlData);
-        return `https://jejakmufassir.my.id/${shortCode}`;
+        return `https://s.jejakmufassir.my.id/${shortCode}`;
         
     } catch (error) {
         console.error('Error with short URL:', error);
@@ -1058,7 +1109,7 @@ function initializeShareButton() {
 
     // Function to get normal URL
     function getNormalUrl(productId) {
-        return `https://www.jejakmufassir.my.id/p/belanja.html?produk=${productId}`;
+        return `https://s.jejakmufassir.my.id/p/belanja.html?produk=${productId}`;
     }
 
     // Updated getShareLink function
