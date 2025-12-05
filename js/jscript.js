@@ -24,6 +24,52 @@ let product1234Slider = {
     endX: 0
 };
 
+// ==================== FUNGSI UTILITAS COOKIE ====================
+// Fungsi untuk menyimpan cookie dengan benar
+function setCookie(name, value, days = 30) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    
+    // Gunakan domain yang benar untuk semua subdomain
+    const domain = window.location.hostname.includes('jejakmufassir.my.id') 
+        ? '.jejakmufassir.my.id' 
+        : window.location.hostname;
+    
+    const cookieString = `${name}=${encodeURIComponent(value)}; expires=${expires.toUTCString()}; path=/; domain=${domain}`;
+    
+    document.cookie = cookieString;
+    console.log(`✅ Cookie ${name} disimpan:`, value.substring(0, 20) + '...');
+    
+    return cookieString;
+}
+
+// Fungsi helper untuk membaca cookie
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        const cookieValue = parts.pop().split(';').shift();
+        return decodeURIComponent(cookieValue);
+    }
+    return null;
+}
+
+// Fungsi untuk melihat semua cookies (debugging)
+function getAllCookies() {
+    const cookies = document.cookie.split(';');
+    const cookieObj = {};
+    
+    cookies.forEach(cookie => {
+        const [name, value] = cookie.trim().split('=');
+        if (name && value) {
+            cookieObj[name] = decodeURIComponent(value);
+        }
+    });
+    
+    return cookieObj;
+}
+
+// ==================== FUNGSI UTILITAS UTAMA ====================
 // Fungsi untuk mengambil produk ID dari span
 function getProductIdFromSpan() {
     const productSpan = document.getElementById('produk');
@@ -33,8 +79,22 @@ function getProductIdFromSpan() {
 // Fungsi untuk mengambil affiliate ID dari URL (jika ada) - DIPERBAIKI
 function getAffiliateIdFromUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    // Cari kedua kemungkinan (affId dan affid)
-    return urlParams.get('affId') || urlParams.get('affid');
+    
+    // Cari semua kemungkinan parameter affiliate
+    const affId = urlParams.get('affId') || 
+                  urlParams.get('affid') || 
+                  urlParams.get('affiliateId') || 
+                  urlParams.get('affiliateid') || 
+                  urlParams.get('ref') || 
+                  urlParams.get('referral');
+    
+    console.log("🔍 Mencari affId dari URL:", {
+        affId: urlParams.get('affId'),
+        affid: urlParams.get('affid'),
+        found: affId
+    });
+    
+    return affId;
 }
 
 // FUNGSI BARU: Mengambil linkproduk dari Firebase berdasarkan sellerId dan productId
@@ -119,41 +179,42 @@ function stripHtmlTags(html) {
     return text;
 }
 
-// Fungsi utama untuk memuat data produk - DIMODIFIKASI
+// ==================== FUNGSI UTAMA LOAD PRODUK ====================
 async function loadProductData() {
     const sku = getProductIdFromSpan();
     const affId = getAffiliateIdFromUrl();
 
-    console.log("Loading product data for SKU:", sku);
-    console.log("AffId from URL:", affId);
+    console.log("📦 Loading product data for SKU:", sku);
+    console.log("🎯 AffId from URL:", affId);
 
     if (sku) {
-        // Simpan affiliate ID di cookie jika ada
-        if (affId) {
-            document.cookie = `affId=${affId}; path=/; max-age=2592000`; // 30 hari
-            console.log("AffId saved to cookie:", affId);
+        // SIMPAN AFFID KE COOKIE SEGERA SAAT PAGE LOAD
+        if (affId && affId.trim() !== '') {
+            setCookie('affId', affId, 30);
+            console.log("✅ affId saved to cookie on page load:", affId);
+            
+            // Juga simpan di localStorage untuk backup
+            try {
+                localStorage.setItem('affId_backup', affId);
+                sessionStorage.setItem('affId_session', affId);
+            } catch (e) {
+                console.log("LocalStorage not available, using cookies only");
+            }
         } else {
-            console.log("No affId found in URL");
+            console.log("⚠️ No affId found in URL");
         }
-// Fungsi helper untuk membaca cookie
-function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return null;
-}
 
         // Cari informasi seller dan produk
         const { sellerId, productKey, productData } = await findSellerAndProductBySku(sku);
         
         if (sellerId && productKey && productData) {
-            console.log("Product found:", productData);
+            console.log("✅ Product found:", productData);
             
-            // DAPATKAN LINKPRODUK - MODIFIKASI BESAR DI SINI
+            // DAPATKAN LINKPRODUK
             const productLink = await getProductLink(sellerId, productKey);
             productData.linkproduk = productLink; // Simpan linkproduk di objek produk
             
-            console.log("Product link retrieved:", productLink);
+            console.log("🔗 Product link retrieved:", productLink);
             
             fetchSellerInfo(sellerId);
 
@@ -187,7 +248,7 @@ function getCookie(name) {
                     });
 
                     product1234Slider.totalSlides = product1234Slider.images.length;
-                    console.log(`Loaded ${product1234Slider.totalSlides} images for product 1234 slider`);
+                    console.log(`📸 Loaded ${product1234Slider.totalSlides} images for product 1234 slider`);
 
                     if (product1234Slider.totalSlides > 0) {
                         // Setup image popup untuk slider images
@@ -316,7 +377,7 @@ function getCookie(name) {
             // Load reviews
             getReviewData(sku);
 
-            // Initialize cart and share buttons - PASS PRODUCT DATA WITH LINKPRODUK
+            // Initialize cart and share buttons
             initializeCartButton(productData);
             initializeShareButton();
 
@@ -334,20 +395,19 @@ function getCookie(name) {
                 };
             });
         } else {
-            console.warn('Produk tidak ditemukan!');
+            console.warn('❌ Produk tidak ditemukan!');
         }
     } else {
-        console.error('ID produk tidak ditemukan!');
+        console.error('❌ ID produk tidak ditemukan!');
     }
 }
 
-// Cart functionality - DIMODIFIKASI untuk menyimpan linkproduk
+// ==================== FUNGSI CART ====================
 function initializeCartButton(productData = null) {
     const addToCartBtn = document.getElementById('add-to-cart-btn');
     const produkId = getProductIdFromSpan();
 
-    console.log("Initializing cart button for product:", produkId);
-    console.log("Product data available:", !!productData);
+    console.log("🛒 Initializing cart button for product:", produkId);
 
     function getUid() {
         return firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
@@ -396,7 +456,7 @@ function initializeCartButton(productData = null) {
         }
     });
 
-    // Add click event listener - DIMODIFIKASI BESAR DI SINI
+    // Add click event listener
     addToCartBtn.addEventListener('click', async () => {
         const uid = getUid();
         if (!uid) {
@@ -458,7 +518,7 @@ function initializeCartButton(productData = null) {
                     berat: currentProductData.berat || '',
                     userID: currentProductData.userID || '',
                     imageUrl: currentProductData.imageUrls ? currentProductData.imageUrls[0] : null,
-                    linkproduk: currentProductData.linkproduk || '' // SIMPAN LINKPRODUK DI CART
+                    linkproduk: currentProductData.linkproduk || ''
                 };
 
                 console.log("Saving to cart:", cartData);
@@ -482,72 +542,128 @@ function initializeCartButton(productData = null) {
     });
 }
 
-// Fungsi untuk menyimpan data pesanan di cookies - DIPERBAIKI LAGI
+// ==================== FUNGSI COOKIE UNTUK ORDER ====================
 function storeOrderDataInCookies(product, quantity) {
+    console.log("=== 🛍️ START storeOrderDataInCookies ===");
+    
     const produkCode = getProductIdFromSpan();
+    console.log("Product code:", produkCode);
     
-    // AMBIL AFFID DARI URL ATAU COOKIES - PERBAIKAN DI SINI
-    let affId = getAffiliateIdFromUrl(); // Ambil dari parameter URL 'affId' atau 'affid'
+    // AMBIL AFFID - PRIORITAS: URL > COOKIE > LOCALSTORAGE
+    let affId = getAffiliateIdFromUrl();
+    console.log("1. affId from URL:", affId);
     
-    console.log("1. affId from URL function:", affId);
-    
-    // Jika tidak ada di URL, coba ambil dari cookies
     if (!affId) {
         affId = getCookie('affId');
-        console.log("2. affId from cookies:", affId);
+        console.log("2. affId from cookie:", affId);
     }
     
-    // Debug: tampilkan semua cookies
-    console.log("All cookies:", document.cookie);
+    if (!affId) {
+        try {
+            affId = localStorage.getItem('affId_backup');
+            console.log("3. affId from localStorage:", affId);
+        } catch (e) {
+            console.log("LocalStorage not available");
+        }
+    }
     
+    if (!affId) {
+        affId = ''; // Kosongkan jika tidak ditemukan
+    }
+    
+    console.log("✅ Final affId to store:", affId);
+    console.log("📏 affId length:", affId.length);
+    
+    // Ambil data lain
     const commissionAmountElement = document.getElementById('commission-amount');
-    const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
-
+    const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0';
+    
     const userIdContainer = document.getElementById('userIdContainer')?.textContent.trim() || '';
 
+    // Data yang akan disimpan
     const cookieData = {
-        checkout_key: product.userID,
-        checkout_sku: product.sku,
-        checkout_judul: product.name,
-        checkout_harga: product.price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "."),
-        checkout_berat: product.berat,
-        checkout_jenisproduk: product.jenisproduk,
-        checkout_deskripsi: product.description,
+        checkout_key: product.userID || '',
+        checkout_sku: product.sku || produkCode || '',
+        checkout_judul: product.name || '',
+        checkout_harga: product.price ? product.price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '0',
+        checkout_berat: product.berat || '',
+        checkout_jenisproduk: product.jenisproduk || '',
+        checkout_deskripsi: product.description || '',
         checkout_city: document.getElementById('city')?.dataset.fullCity || '',
         checkout_sellername: document.getElementById('seller-name')?.dataset.sellerName || '',
         checkout_koordinatLokasi: document.getElementById('koordinatLokasi')?.dataset.koordinatLokasi || '',
-        checkout_quantity: quantity,
+        checkout_quantity: quantity.toString(),
         checkout_color: product.selectedColor || '',
         checkout_size: product.selectedSize || '',
-        checkout_variation_image: product.selectedImageUrl || product.imageUrls[0],
-        checkout_produkkode: produkCode,
-        checkout_affId: affId || '', // Simpan affId (bisa string kosong jika tidak ada)
+        checkout_variation_image: product.selectedImageUrl || (product.imageUrls && product.imageUrls[0]) || '',
+        checkout_produkkode: produkCode || '',
+        checkout_affId: affId,
         checkout_komisi: commissionAmount,
         checkout_currentId: userIdContainer,
         checkout_linkproduk: product.linkproduk || ''
     };
 
     // Store image URLs in cookies
-    product.imageUrls.forEach((url, index) => {
-        cookieData[`checkout_urlgambar${index + 1}`] = url;
+    if (product.imageUrls && Array.isArray(product.imageUrls)) {
+        product.imageUrls.forEach((url, index) => {
+            if (url) {
+                cookieData[`checkout_urlgambar${index + 1}`] = url;
+            }
+        });
+    }
+
+    // Simpan SEMUA cookie dengan fungsi setCookie yang benar
+    console.log("=== 📝 SETTING COOKIES ===");
+    Object.entries(cookieData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            setCookie(key, value.toString(), 30);
+            console.log(`Set ${key}:`, value.toString().substring(0, 50));
+        }
     });
 
-    // Set cookies dengan domain yang benar
-    Object.entries(cookieData).forEach(([key, value]) => {
-        // Gunakan domain .jejakmufassir.my.id agar cookie bisa diakses di subdomain
-        document.cookie = `${key}=${encodeURIComponent(value)}; path=/; domain=.jejakmufassir.my.id`;
-    });
-    
-    // Debug log untuk memastikan affId tersimpan
-    console.log("AffId stored in cookies:", affId);
-    console.log("All cookies set:", cookieData);
-    
-    // Verifikasi cookies tersimpan
+    // Simpan juga di localStorage sebagai backup
+    try {
+        localStorage.setItem('checkout_data_backup', JSON.stringify(cookieData));
+        console.log("✅ Also saved to localStorage");
+    } catch (e) {
+        console.error("Error saving to localStorage:", e);
+    }
+
+    // Tampilkan semua cookies yang tersimpan
     setTimeout(() => {
-        console.log("Verified checkout_affId cookie:", getCookie('checkout_affId'));
-    }, 100);
+        console.log("=== 🔍 VERIFICATION ===");
+        console.log("All cookies:", document.cookie);
+        
+        // Verifikasi khusus checkout_affId
+        const verifyAffId = getCookie('checkout_affId');
+        console.log("Verified checkout_affId:", verifyAffId);
+        console.log("Verified length:", verifyAffId ? verifyAffId.length : 0);
+        
+        if (verifyAffId === affId) {
+            console.log("✅ SUCCESS: checkout_affId matches!");
+        } else {
+            console.log("❌ ERROR: checkout_affId mismatch!");
+            console.log("Expected:", affId);
+            console.log("Got:", verifyAffId);
+        }
+        
+        // Tampilkan semua checkout cookies
+        const allCookies = getAllCookies();
+        const checkoutCookies = {};
+        Object.keys(allCookies).forEach(key => {
+            if (key.startsWith('checkout_')) {
+                checkoutCookies[key] = allCookies[key];
+            }
+        });
+        console.log("All checkout cookies:", checkoutCookies);
+    }, 300);
+    
+    console.log("=== ✅ END storeOrderDataInCookies ===");
+    
+    return cookieData;
 }
-// Setup slider untuk produk 1234
+
+// ==================== FUNGSI SLIDER PRODUK 1234 ====================
 function setupProduct1234Slider() {
     const prevBtn = document.getElementById('product-1234-prev');
     const nextBtn = document.getElementById('product-1234-next');
@@ -678,12 +794,11 @@ function handleSliderImageClick(e) {
     openFullscreen(e.target.src);
 }
 
-// Fungsi untuk menghitung harga asli
+// ==================== FUNGSI PRODUK & DESKRIPSI ====================
 function calculateOriginalPrice(currentPrice, discountPercent) {
     return Math.round(currentPrice / (1 - (discountPercent / 100)));
 }
 
-// Fungsi untuk memformat deskripsi (untuk tampilan di halaman)
 function formatDescription(description) {
     if (!description) return '';
     
@@ -695,7 +810,6 @@ function formatDescription(description) {
     }
 }
 
-// Fungsi untuk mendapatkan deskripsi dalam format teks biasa (untuk shortURL)
 function getPlainTextDescription(description) {
     if (!description) return '';
     
@@ -712,7 +826,6 @@ function getPlainTextDescription(description) {
     }
 }
 
-// Fungsi untuk memeriksa tinggi deskripsi
 function checkDescriptionHeight() {
     const container = document.querySelector('.description-container');
     if (container) {
@@ -729,7 +842,7 @@ function checkDescriptionHeight() {
     }
 }
 
-// Fungsi untuk menghitung dan memperbarui rating rata-rata
+// ==================== FUNGSI RATING DAN REVIEW ====================
 function calculateAndUpdateAverageRating(sku, sellerId, productKey) {
     const reviewRef = database.ref(`testimoni/${sku}`);
     reviewRef.once('value').then((snapshot) => {
@@ -755,7 +868,6 @@ function calculateAndUpdateAverageRating(sku, sellerId, productKey) {
     });
 }
 
-// Fungsi untuk memperbarui rating rata-rata
 function updateAverageRating(rating) {
     const averageRatingElement = document.getElementById("jm-average-rating");
     if (averageRatingElement) {
@@ -763,7 +875,7 @@ function updateAverageRating(rating) {
     }
 }
 
-// Fungsi untuk menampilkan popup quantity
+// ==================== FUNGSI QUANTITY POPUP ====================
 function showQuantityPopup(product) {
     const popup = document.createElement('div');
     popup.className = 'quantity-popup';
@@ -950,13 +1062,18 @@ function showQuantityPopup(product) {
         }
     });
 
-    // Create order button
+    // Create order button - DIPERBAIKI
     createOrderBtn.addEventListener('click', () => {
+        console.log("🛒 Tombol Buat Pesanan diklik!");
+        
         if (!validateSelection()) {
+            console.log("❌ Validasi gagal");
             return;
         }
 
         const quantity = parseInt(quantityInput.value);
+        console.log("📊 Quantity selected:", quantity);
+        
         let orderData;
         if (selectedVariation) {
             orderData = {
@@ -968,14 +1085,23 @@ function showQuantityPopup(product) {
                 selectedImageUrl: selectedVariation.imageUrls[0],
                 quantity: quantity
             };
+            console.log("📦 Order data with variation:", orderData);
         } else {
             orderData = {
                 ...product,
                 quantity: quantity
             };
+            console.log("📦 Order data without variation:", orderData);
         }
-        storeOrderDataInCookies(orderData, quantity);
-        window.location.href = 'https://www.jejakmufassir.my.id/p/pesanan.html';
+        
+        // Simpan data ke cookies
+        const savedData = storeOrderDataInCookies(orderData, quantity);
+        
+        // Tunggu sebentar sebelum redirect untuk memastikan cookies tersimpan
+        setTimeout(() => {
+            console.log("🚀 Redirecting to pesanan.html");
+            window.location.href = 'https://www.jejakmufassir.my.id/p/pesanan.html';
+        }, 500);
     });
 
     // Close button
@@ -990,7 +1116,6 @@ function showQuantityPopup(product) {
     validateSelection();
 }
 
-// Fungsi untuk menutup popup quantity
 function closeQuantityPopup() {
     const popup = document.querySelector('.quantity-popup');
     if (popup) {
@@ -1001,7 +1126,7 @@ function closeQuantityPopup() {
     }
 }
 
-// Fungsi untuk menampilkan notifikasi
+// ==================== FUNGSI NOTIFIKASI ====================
 function showNotification(message, isSuccess) {
     const notification = document.createElement('div');
     notification.className = `floating-notification ${isSuccess ? 'success' : 'error'}`;
@@ -1017,7 +1142,7 @@ function showNotification(message, isSuccess) {
     }, 3000);
 }
 
-// MODIFIKASI BESAR: Fungsi untuk mendapatkan data produk lengkap untuk shortURL
+// ==================== FUNGSI SHARE BUTTON ====================
 async function getCompleteProductData(productId) {
     try {
         const { sellerId, productKey, productData } = await findSellerAndProductBySku(productId);
@@ -1054,7 +1179,6 @@ async function getCompleteProductData(productId) {
     }
 }
 
-// MODIFIKASI BESAR: Fungsi generateShortUrl yang diperbarui
 async function generateShortUrl(productId, affId = '') {
     const shortUrlsRef = firebase.database().ref('shortUrls');
     
@@ -1129,7 +1253,6 @@ async function generateShortUrl(productId, affId = '') {
     }
 }
 
-// Share button functionality - DIMODIFIKASI
 function initializeShareButton() {
     const shareButton = document.getElementById('share-button');
     const svgShareUrl = 'https://res.cloudinary.com/jejak-mufassir/image/upload/v1759384356/Icon-icon/share_ynkrjy.svg';
@@ -1308,7 +1431,7 @@ function initializeShareButton() {
     });
 }
 
-// Function to format time difference
+// ==================== FUNGSI SELLER INFO ====================
 function formatTimeDifference(timestamp) {
     const now = Date.now();
     const diff = now - timestamp;
@@ -1326,7 +1449,6 @@ function formatTimeDifference(timestamp) {
     }
 }
 
-// Function to fetch and display seller info
 function fetchSellerInfo(sellerId) {
     // Fetch profile picture
     const profileUrlRef = database.ref(`users/${sellerId}/profilurl`);
@@ -1386,7 +1508,7 @@ function fetchSellerInfo(sellerId) {
     };
 }
 
-// Reviews functionality
+// ==================== FUNGSI REVIEWS ====================
 let currentPage = 1;
 const reviewsPerPage = 10;
 let allReviews = [];
@@ -1546,7 +1668,7 @@ function setupFullscreenOverlay() {
     }
 }
 
-// Digital carousel functionality
+// ==================== FUNGSI DIGITAL CAROUSEL ====================
 (function() {
     const JMDigitalCarousel = {};
 
@@ -1877,7 +1999,7 @@ function setupFullscreenOverlay() {
     }
 })();
 
-// Console protection
+// ==================== CONSOLE PROTECTION ====================
 (function() {
     const warningMessage = 'Kamu dilarang melihat console!';
     
@@ -1960,16 +2082,78 @@ function setupFullscreenOverlay() {
     console.log();
 })();
 
+// ==================== FUNGSI DEBUG UTAMA ====================
+// Tambahkan tombol debug ke halaman
+function addDebugButton() {
+    const debugBtn = document.createElement('button');
+    debugBtn.textContent = 'Debug Cookies';
+    debugBtn.style.position = 'fixed';
+    debugBtn.style.bottom = '10px';
+    debugBtn.style.right = '10px';
+    debugBtn.style.zIndex = '9999';
+    debugBtn.style.padding = '10px';
+    debugBtn.style.background = '#f00';
+    debugBtn.style.color = '#fff';
+    debugBtn.style.border = 'none';
+    debugBtn.style.borderRadius = '5px';
+    debugBtn.style.cursor = 'pointer';
+    debugBtn.onclick = () => {
+        console.log("=== 🐛 DEBUG COOKIES ===");
+        console.log("All cookies:", document.cookie);
+        console.log("Parsed cookies:", getAllCookies());
+        console.log("checkout_affId:", getCookie('checkout_affId'));
+        console.log("affId:", getCookie('affId'));
+        
+        // Tampilkan semua checkout cookies
+        const allCookies = getAllCookies();
+        const checkoutCookies = {};
+        Object.keys(allCookies).forEach(key => {
+            if (key.startsWith('checkout_')) {
+                checkoutCookies[key] = allCookies[key];
+            }
+        });
+        console.log("All checkout cookies:", checkoutCookies);
+        
+        alert('Check console for cookie debug info\ncheckout_affId: ' + getCookie('checkout_affId'));
+    };
+    
+    document.body.appendChild(debugBtn);
+}
+
+// Ekspor fungsi ke global scope untuk debugging
+window.debugCookies = function() {
+    console.log("=== 🐛 DEBUG COOKIES ===");
+    console.log("All cookies:", document.cookie);
+    console.log("Parsed cookies:", getAllCookies());
+    console.log("checkout_affId:", getCookie('checkout_affId'));
+    console.log("affId:", getCookie('affId'));
+};
+
+// ==================== INISIALISASI ====================
 // Panggil fungsi utama saat halaman dimuat
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("DOM loaded, initializing product page");
+    console.log("🚀 DOM loaded, initializing product page");
+    
+    // Tambahkan tombol debug
+    addDebugButton();
+    
+    // Load data produk
     loadProductData();
+    
+    // Setup fullscreen overlay
     setupFullscreenOverlay();
+    
+    // Cek dan log cookies saat ini
+    setTimeout(() => {
+        console.log("📋 Initial cookies check:");
+        console.log("affId cookie:", getCookie('affId'));
+        console.log("URL affId:", getAffiliateIdFromUrl());
+    }, 1000);
 });
 
 // Setup slider saat window selesai load
 window.addEventListener('load', function() {
-    console.log("Window loaded, finalizing slider setup");
+    console.log("✅ Window loaded, finalizing slider setup");
     // Pastikan slider diupdate setelah semua gambar dimuat
     setTimeout(() => {
         updateProduct1234Slider();
@@ -1980,3 +2164,6 @@ window.addEventListener('load', function() {
 // Expose functions to global scope
 window.openFullscreen = openFullscreen;
 window.closeFullscreen = closeFullscreen;
+window.getCookie = getCookie;
+window.setCookie = setCookie;
+window.getAllCookies = getAllCookies;
