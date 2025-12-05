@@ -36,91 +36,29 @@ function getAffiliateIdFromUrl() {
     return urlParams.get('affId'); // Perhatikan: 'affId' bukan 'affid'
 }
 
-// FUNGSI BARU: Mendapatkan timestamp saat ini dalam detik
-function getCurrentTimestamp() {
-    return Math.floor(Date.now() / 1000);
-}
-
-// FUNGSI BARU: Mengambil affiliate ID dari cookies dengan masa berlaku 7 hari
+// FUNGSI BARU: Mengambil affiliate ID dari cookies
 function getAffiliateIdFromCookies() {
     const name = 'affId' + '=';
     const decodedCookie = decodeURIComponent(document.cookie);
     const ca = decodedCookie.split(';');
-    
     for(let i = 0; i < ca.length; i++) {
         let c = ca[i];
         while (c.charAt(0) === ' ') {
             c = c.substring(1);
         }
         if (c.indexOf(name) === 0) {
-            const cookieValue = c.substring(name.length, c.length);
-            
-            // Cek apakah cookie memiliki format dengan timestamp
-            if (cookieValue.includes('|')) {
-                const parts = cookieValue.split('|');
-                const affId = parts[0];
-                const expiryTimestamp = parseInt(parts[1]);
-                const currentTimestamp = getCurrentTimestamp();
-                
-                // Jika masih berlaku (masih dalam 7 hari)
-                if (expiryTimestamp > currentTimestamp) {
-                    console.log("✅ Affiliate ID masih berlaku:", affId, 
-                              "Sisa waktu:", Math.floor((expiryTimestamp - currentTimestamp) / 86400), "hari");
-                    return affId;
-                } else {
-                    // Jika sudah expired, hapus cookie
-                    console.log("❌ Affiliate ID sudah expired:", affId);
-                    deleteAffiliateIdCookie();
-                    return '';
-                }
-            } else {
-                // Format lama (tanpa timestamp), anggap expired
-                console.log("⚠️ Format cookie lama, menghapus...");
-                deleteAffiliateIdCookie();
-                return '';
-            }
+            return c.substring(name.length, c.length);
         }
     }
-    console.log("ℹ️ Tidak ditemukan affiliate ID di cookies");
     return '';
 }
 
-// FUNGSI BARU: Menyimpan affiliate ID ke cookies dengan masa berlaku 7 hari
+// FUNGSI BARU: Menyimpan affiliate ID ke cookies
 function saveAffiliateIdToCookies(affId) {
     if (affId && affId.trim() !== '') {
-        // Hitung expiry timestamp (7 hari dari sekarang dalam detik)
-        const expiryTimestamp = getCurrentTimestamp() + (7 * 24 * 60 * 60); // 7 hari
-        
-        // Format: affId|expiryTimestamp
-        const cookieValue = `${affId}|${expiryTimestamp}`;
-        
-        // Hitung tanggal expiry untuk cookie
-        const expiryDate = new Date();
-        expiryDate.setTime(expiryDate.getTime() + (7 * 24 * 60 * 60 * 1000)); // 7 hari dalam milidetik
-        
-        // Simpan cookie dengan path=/, domain=.jejakmufassir.my.id (agar bisa diakses semua subdomain)
-        const expires = "expires=" + expiryDate.toUTCString();
-        const domain = "domain=.jejakmufassir.my.id";
-        const path = "path=/";
-        
-        document.cookie = `affId=${cookieValue}; ${expires}; ${domain}; ${path}`;
-        console.log("💾 Affiliate ID saved to cookies:", affId, "| Expires in 7 days");
-        
-        // Verifikasi cookie tersimpan
-        setTimeout(() => {
-            const savedAffId = getAffiliateIdFromCookies();
-            console.log("🔍 Verifikasi cookie setelah save:", savedAffId === affId ? "✅ Berhasil" : "❌ Gagal");
-        }, 100);
-    } else {
-        console.log("⚠️ Affiliate ID kosong, tidak disimpan ke cookies");
+        document.cookie = `affId=${affId}; path=/; max-age=2592000`; // 30 hari
+        console.log("Affiliate ID saved to cookies:", affId);
     }
-}
-
-// FUNGSI BARU: Menghapus affiliate ID cookie
-function deleteAffiliateIdCookie() {
-    const pastDate = new Date(0).toUTCString();
-    document.cookie = "affId=; expires=" + pastDate + "; domain=.jejakmufassir.my.id; path=/";
-    console.log("🗑️ Affiliate ID cookie deleted");
 }
 
 // FUNGSI BARU: Memperbarui span dengan affiliate ID
@@ -128,60 +66,30 @@ function updateAffiliateIdSpan(affId) {
     const affIdSpan = document.getElementById('affId');
     if (affIdSpan) {
         affIdSpan.textContent = affId || '';
-        console.log("📝 Affiliate ID span updated with:", affId || '(empty)');
+        console.log("Affiliate ID span updated with:", affId || '(empty)');
     }
 }
 
-// FUNGSI BARU: Inisialisasi sistem affiliate ID yang lebih canggih
+// FUNGSI BARU: Inisialisasi sistem affiliate ID
 function initializeAffiliateIdSystem() {
-    console.log("🚀 Initializing Affiliate ID System...");
-    console.log("🌐 Current URL:", window.location.href);
-    
-    // 1. Ambil affiliate ID dari URL (jika ada)
+    // 1. Ambil affiliate ID dari URL
     const urlAffId = getAffiliateIdFromUrl();
-    console.log("🔗 URL Affiliate ID:", urlAffId || '(empty)');
     
-    // 2. Ambil affiliate ID dari cookies (jika ada dan masih berlaku)
-    const cookieAffId = getAffiliateIdFromCookies();
-    console.log("🍪 Cookie Affiliate ID:", cookieAffId || '(empty)');
-    
-    // 3. LOGIKA UTAMA YANG DIPERBAIKI
+    // 2. Jika ada affiliate ID di URL, simpan ke cookies
     if (urlAffId && urlAffId.trim() !== '') {
-        // 🎯 JIKA ADA AFFILIATE ID DI URL: SELALU SIMPAN/UPDATE
-        console.log("🎯 URL memiliki affiliate ID:", urlAffId);
-        
-        // 💥 SELALU SIMPAN AFFILIATE ID BARU DARI URL
-        // Tidak peduli apakah sama atau berbeda dengan yang di cookies
-        console.log("💥 Menyimpan affiliate ID baru dari URL ke cookies...");
         saveAffiliateIdToCookies(urlAffId);
-        
-        // Gunakan affiliate ID dari URL
-        updateAffiliateIdSpan(urlAffId);
-        console.log("✅ Final affiliate ID (from URL):", urlAffId);
-        
-    } else {
-        // Jika tidak ada affiliate ID di URL
-        console.log("📭 Tidak ada affiliate ID di URL");
-        
-        if (cookieAffId && cookieAffId.trim() !== '') {
-            // Gunakan affiliate ID dari cookies (jika masih berlaku)
-            console.log("🍪 Menggunakan affiliate ID dari cookies:", cookieAffId);
-            updateAffiliateIdSpan(cookieAffId);
-            console.log("✅ Final affiliate ID (from cookies):", cookieAffId);
-        } else {
-            // Tidak ada affiliate ID sama sekali
-            console.log("❌ Tidak ada affiliate ID yang berlaku");
-            updateAffiliateIdSpan('');
-            console.log("✅ Final affiliate ID: (empty)");
-        }
     }
     
-    // Log informasi akhir
-    console.log("📊 Affiliate ID System Summary:");
-    console.log("- URL Affiliate ID:", urlAffId || '(empty)');
-    console.log("- Cookie Affiliate ID (after processing):", getAffiliateIdFromCookies() || '(empty)');
-    console.log("- Final Span Value:", document.getElementById('affId')?.textContent || '(empty)');
-    console.log("✅ Affiliate ID System Initialization Complete");
+    // 3. Ambil affiliate ID dari cookies (baik yang baru disimpan atau yang sudah ada)
+    const cookieAffId = getAffiliateIdFromCookies();
+    
+    // 4. Perbarui span dengan affiliate ID
+    updateAffiliateIdSpan(cookieAffId);
+    
+    console.log("Affiliate ID System Initialized:");
+    console.log("- From URL:", urlAffId || '(empty)');
+    console.log("- From Cookies:", cookieAffId || '(empty)');
+    console.log("- Final affiliate ID:", cookieAffId || '(empty)');
 }
 
 // FUNGSI BARU: Mengambil linkproduk dari Firebase berdasarkan sellerId dan productId
@@ -619,13 +527,8 @@ function initializeCartButton(productData = null) {
 function storeOrderDataInCookies(product, quantity) {
     const produkCode = getProductIdFromSpan();
     
-    // DAPATKAN AFFILIATE ID DARI COOKIES (yang masih berlaku 7 hari)
+    // DAPATKAN AFFILIATE ID DARI COOKIES (bukan dari URL lagi)
     const affId = getAffiliateIdFromCookies();
-    
-    console.log("🛒 Storing order data in cookies...");
-    console.log("📦 Product:", product.name);
-    console.log("👤 Affiliate ID:", affId || '(empty)');
-    console.log("🔢 Quantity:", quantity);
 
     const commissionAmountElement = document.getElementById('commission-amount');
     const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
@@ -659,25 +562,12 @@ function storeOrderDataInCookies(product, quantity) {
         cookieData[`checkout_urlgambar${index + 1}`] = url;
     });
 
-    // Set cookies (semua checkout data kecuali affId akan expired saat session berakhir)
+    // Set cookies
     Object.entries(cookieData).forEach(([key, value]) => {
-        if (key === 'checkout_affId') {
-            // checkout_affId diambil dari cookie affId yang sudah ada dengan masa berlaku 7 hari
-            // Tidak perlu set ulang, gunakan yang sudah ada
-            console.log("🎯 checkout_affId menggunakan nilai dari cookie affId:", affId || '(empty)');
-        } else {
-            // Data checkout lainnya akan expired saat session berakhir
-            document.cookie = `${key}=${encodeURIComponent(value)}; path=/; domain=.jejakmufassir.my.id`;
-            console.log(`📝 Set cookie: ${key}=${value.substring(0, 50)}${value.length > 50 ? '...' : ''}`);
-        }
+        document.cookie = `${key}=${encodeURIComponent(value)}; path=/`;
     });
     
-    console.log("✅ Order data saved to cookies successfully!");
-    console.log("📊 Summary:");
-    console.log("- Product Name:", product.name);
-    console.log("- Affiliate ID:", affId || '(empty)');
-    console.log("- Product Code:", produkCode);
-    console.log("- Product Link:", product.linkproduk ? '✅ Ada' : '❌ Tidak ada');
+    console.log("Order data saved to cookies with affiliate ID:", affId || '(empty)');
 }
 
 // Setup slider untuk produk 1234
