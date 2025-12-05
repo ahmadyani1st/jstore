@@ -33,12 +33,12 @@ function getProductIdFromSpan() {
 // FUNGSI BARU: Mengambil affiliate ID dari URL parameter 'affId'
 function getAffiliateIdFromUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('affId'); // Perhatikan: 'affId' bukan 'affid'
+    return urlParams.get('affId');
 }
 
 // FUNGSI BARU: Mengambil affiliate ID dari cookies
 function getAffiliateIdFromCookies() {
-    const name = 'affId' + '=';
+    const name = 'checkout_affId' + '=';
     const decodedCookie = decodeURIComponent(document.cookie);
     const ca = decodedCookie.split(';');
     for(let i = 0; i < ca.length; i++) {
@@ -53,43 +53,40 @@ function getAffiliateIdFromCookies() {
     return '';
 }
 
-// FUNGSI BARU: Menyimpan affiliate ID ke cookies
-function saveAffiliateIdToCookies(affId) {
+// FUNGSI BARU: Menyimpan affiliate ID ke cookies untuk checkout
+function saveAffiliateIdToCheckoutCookies(affId) {
     if (affId && affId.trim() !== '') {
-        document.cookie = `affId=${affId}; path=/; max-age=2592000`; // 30 hari
-        console.log("Affiliate ID saved to cookies:", affId);
+        document.cookie = `checkout_affId=${affId}; path=/; max-age=2592000`; // 30 hari
+        console.log("Affiliate ID saved to checkout cookies:", affId);
+    } else {
+        // Jika affId kosong, tetap set cookie kosong
+        document.cookie = `checkout_affId=; path=/; max-age=2592000`;
+        console.log("Empty affiliate ID saved to checkout cookies");
     }
 }
 
-// FUNGSI BARU: Memperbarui span dengan affiliate ID
-function updateAffiliateIdSpan(affId) {
-    const affIdSpan = document.getElementById('affId');
-    if (affIdSpan) {
-        affIdSpan.textContent = affId || '';
-        console.log("Affiliate ID span updated with:", affId || '(empty)');
-    }
-}
-
-// FUNGSI BARU: Inisialisasi sistem affiliate ID
+// FUNGSI BARU: Inisialisasi sistem affiliate ID untuk halaman produk
 function initializeAffiliateIdSystem() {
     // 1. Ambil affiliate ID dari URL
     const urlAffId = getAffiliateIdFromUrl();
     
-    // 2. Jika ada affiliate ID di URL, simpan ke cookies
+    // 2. Jika ada affiliate ID di URL, simpan ke cookies khusus checkout
     if (urlAffId && urlAffId.trim() !== '') {
-        saveAffiliateIdToCookies(urlAffId);
+        saveAffiliateIdToCheckoutCookies(urlAffId);
     }
     
-    // 3. Ambil affiliate ID dari cookies (baik yang baru disimpan atau yang sudah ada)
-    const cookieAffId = getAffiliateIdFromCookies();
-    
-    // 4. Perbarui span dengan affiliate ID
-    updateAffiliateIdSpan(cookieAffId);
-    
-    console.log("Affiliate ID System Initialized:");
-    console.log("- From URL:", urlAffId || '(empty)');
-    console.log("- From Cookies:", cookieAffId || '(empty)');
-    console.log("- Final affiliate ID:", cookieAffId || '(empty)');
+    // 3. Perbarui span dengan affiliate ID dari cookies
+    updateAffiliateIdSpan();
+}
+
+// FUNGSI BARU: Memperbarui span dengan affiliate ID dari cookies
+function updateAffiliateIdSpan() {
+    const affIdSpan = document.getElementById('affId');
+    if (affIdSpan) {
+        const cookieAffId = getAffiliateIdFromCookies();
+        affIdSpan.textContent = cookieAffId || '';
+        console.log("Affiliate ID span updated with:", cookieAffId || '(empty)');
+    }
 }
 
 // FUNGSI BARU: Mengambil linkproduk dari Firebase berdasarkan sellerId dan productId
@@ -137,6 +134,46 @@ async function findSellerAndProductBySku(sku) {
     } catch (error) {
         console.error("Error finding product by SKU:", error);
         return { sellerId: null, productKey: null, productData: null };
+    }
+}
+
+// FUNGSI BARU UNTUK FITUR SHORTURL: Cek apakah user terautentifikasi dan dapat menyimpan affId
+async function canSaveAffIdToShortUrl(sellerId, productKey) {
+    try {
+        const currentUser = auth.currentUser;
+        
+        // Jika user tidak terautentifikasi, return false
+        if (!currentUser) {
+            console.log("User not authenticated, cannot save affId");
+            return { canSave: false, affId: null };
+        }
+        
+        const currentUserId = currentUser.uid;
+        
+        // Ambil userID penjual dari produk
+        const productRef = database.ref(`sellers/${sellerId}/products/${productKey}`);
+        const snapshot = await productRef.once('value');
+        const productData = snapshot.val();
+        
+        if (!productData || !productData.userID) {
+            console.log("Product data or userID not found");
+            return { canSave: false, affId: null };
+        }
+        
+        const sellerUserId = productData.userID;
+        
+        // Jika current user sama dengan penjual, return false
+        if (currentUserId === sellerUserId) {
+            console.log("Current user is the seller, cannot save affId");
+            return { canSave: false, affId: null };
+        }
+        
+        // Jika semua kondisi terpenuhi, return true dengan affId
+        return { canSave: true, affId: currentUserId };
+        
+    } catch (error) {
+        console.error("Error checking affId save permission:", error);
+        return { canSave: false, affId: null };
     }
 }
 
@@ -190,9 +227,9 @@ async function loadProductData() {
         if (sellerId && productKey && productData) {
             console.log("Product found:", productData);
             
-            // DAPATKAN LINKPRODUK - MODIFIKASI BESAR DI SINI
+            // DAPATKAN LINKPRODUK
             const productLink = await getProductLink(sellerId, productKey);
-            productData.linkproduk = productLink; // Simpan linkproduk di objek produk
+            productData.linkproduk = productLink;
             
             console.log("Product link retrieved:", productLink);
             
@@ -357,7 +394,7 @@ async function loadProductData() {
             // Load reviews
             getReviewData(sku);
 
-            // Initialize cart and share buttons - PASS PRODUCT DATA WITH LINKPRODUK
+            // Initialize cart and share buttons
             initializeCartButton(productData);
             initializeShareButton();
 
@@ -382,7 +419,7 @@ async function loadProductData() {
     }
 }
 
-// Cart functionality - DIMODIFIKASI untuk menyimpan linkproduk
+// Cart functionality
 function initializeCartButton(productData = null) {
     const addToCartBtn = document.getElementById('add-to-cart-btn');
     const produkId = getProductIdFromSpan();
@@ -437,7 +474,7 @@ function initializeCartButton(productData = null) {
         }
     });
 
-    // Add click event listener - DIMODIFIKASI BESAR DI SINI
+    // Add click event listener
     addToCartBtn.addEventListener('click', async () => {
         const uid = getUid();
         if (!uid) {
@@ -499,7 +536,7 @@ function initializeCartButton(productData = null) {
                     berat: currentProductData.berat || '',
                     userID: currentProductData.userID || '',
                     imageUrl: currentProductData.imageUrls ? currentProductData.imageUrls[0] : null,
-                    linkproduk: currentProductData.linkproduk || '' // SIMPAN LINKPRODUK DI CART
+                    linkproduk: currentProductData.linkproduk || ''
                 };
 
                 console.log("Saving to cart:", cartData);
@@ -527,8 +564,9 @@ function initializeCartButton(productData = null) {
 function storeOrderDataInCookies(product, quantity) {
     const produkCode = getProductIdFromSpan();
     
-    // DAPATKAN AFFILIATE ID DARI COOKIES (bukan dari URL lagi)
-    const affId = getAffiliateIdFromCookies();
+    // DAPATKAN AFFILIATE ID DARI SPAN (yang sudah diisi dari URL)
+    const affIdSpan = document.getElementById('affId');
+    const affId = affIdSpan ? affIdSpan.textContent.trim() : '';
 
     const commissionAmountElement = document.getElementById('commission-amount');
     const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
@@ -551,10 +589,10 @@ function storeOrderDataInCookies(product, quantity) {
         checkout_size: product.selectedSize || '',
         checkout_variation_image: product.selectedImageUrl || product.imageUrls[0],
         checkout_produkkode: produkCode,
-        checkout_affId: affId, // Simpan affiliate ID dari cookies
+        checkout_affId: affId, // Simpan affiliate ID dari span
         checkout_komisi: commissionAmount,
         checkout_currentId: userIdContainer,
-        checkout_linkproduk: product.linkproduk || '' // SIMPAN LINKPRODUK DI COOKIES
+        checkout_linkproduk: product.linkproduk || ''
     };
 
     // Store image URLs in cookies
@@ -1069,7 +1107,10 @@ async function getCompleteProductData(productId) {
             title: productData.name || '',
             description: description,
             image: image,
-            linkproduk: linkproduk || ''
+            linkproduk: linkproduk || '',
+            sellerId: sellerId,
+            productKey: productKey,
+            sellerUserId: productData.userID
         };
     } catch (error) {
         console.error("Error getting complete product data:", error);
@@ -1077,15 +1118,39 @@ async function getCompleteProductData(productId) {
     }
 }
 
-// MODIFIKASI BESAR: Fungsi generateShortUrl yang diperbarui dengan affiliate ID
+// MODIFIKASI BESAR: Fungsi generateShortUrl yang diperbarui dengan logika affiliate ID
 async function generateShortUrl(productId) {
     const shortUrlsRef = firebase.database().ref('shortUrls');
     
     try {
-        // Dapatkan affiliate ID dari cookies
-        const affId = getAffiliateIdFromCookies();
+        // Dapatkan data produk lengkap termasuk seller info
+        const productData = await getCompleteProductData(productId);
         
-        // First, check if a short URL already exists for this combination
+        if (!productData) {
+            throw new Error('Product data not found');
+        }
+        
+        // Cek apakah user dapat menyimpan affId
+        const { canSave, affId } = await canSaveAffIdToShortUrl(
+            productData.sellerId, 
+            productData.productKey
+        );
+        
+        console.log("ShortURL - Can save affId:", canSave, "AffId:", affId);
+        
+        // Data yang akan disimpan di shortURL
+        const urlData = {
+            productId: productId,
+            affId: canSave ? affId : '', // Kosong jika tidak boleh menyimpan
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            title: productData.title,
+            description: productData.description,
+            image: productData.image,
+            linkproduk: productData.linkproduk,
+            sellerUserId: productData.sellerUserId
+        };
+        
+        // Cek apakah sudah ada short URL untuk produk ini dengan affiliate ID yang sama
         const existingUrlSnapshot = await shortUrlsRef
             .orderByChild('productId')
             .equalTo(productId)
@@ -1093,34 +1158,17 @@ async function generateShortUrl(productId) {
         
         const existingUrls = existingUrlSnapshot.val();
         
-        // Dapatkan data produk lengkap
-        const productData = await getCompleteProductData(productId);
-        
-        if (!productData) {
-            throw new Error('Product data not found');
-        }
-        
-        // Data yang akan disimpan di shortURL
-        const urlData = {
-            productId: productId,
-            affId: affId || '', // Simpan affiliate ID (bisa kosong)
-            createdAt: firebase.database.ServerValue.TIMESTAMP,
-            title: productData.title,
-            description: productData.description, // Sekarang dalam format teks biasa
-            image: productData.image,
-            linkproduk: productData.linkproduk
-        };
-        
         if (existingUrls) {
             // Cari existing URL dengan affiliate ID yang sama
             for (const [shortCode, existingData] of Object.entries(existingUrls)) {
-                if (existingData.affId === affId || (!existingData.affId && !affId)) {
+                if (existingData.affId === urlData.affId) {
                     // Update data dengan informasi tambahan
                     await shortUrlsRef.child(shortCode).update({
                         title: productData.title,
                         description: productData.description,
                         image: productData.image,
-                        linkproduk: productData.linkproduk
+                        linkproduk: productData.linkproduk,
+                        sellerUserId: productData.sellerUserId
                     });
                     return `https://s.jejakmufassir.my.id/${shortCode}`;
                 }
@@ -1158,7 +1206,7 @@ function initializeShareButton() {
 
     // Updated getShareLink function dengan affiliate ID
     async function getShareLink(productId) {
-        // Selalu generate short URL dengan affiliate ID dari cookies
+        // Selalu generate short URL dengan logika affiliate ID yang benar
         return await generateShortUrl(productId);
     }
 
@@ -1432,8 +1480,8 @@ function renderReviews() {
 
 function renderReview(review) {
     const container = document.getElementById("jm-reviews-list");
-    const reviewElement = document.createElement("div");
-    reviewElement.className = "jm-review";
+    const reviewElement = document.createElement('div');
+    reviewElement.className = 'jm-review';
     reviewElement.innerHTML = `
         <div class="jm-review-content">${review.content}</div>
         <div class="jm-review-meta">
