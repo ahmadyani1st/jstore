@@ -473,8 +473,7 @@ function initializeCartButton(productData = null) {
 // Fungsi untuk menyimpan data pesanan di cookies - DIMODIFIKASI
 function storeOrderDataInCookies(product, quantity) {
     const produkCode = getProductIdFromSpan();
-    const affId = getAffiliateIdFromUrl();
-
+    const affId = getURLParameter('affId'); // Ambil nilai dari parameter 'affId' di URL
     const commissionAmountElement = document.getElementById('commission-amount');
     const commissionAmount = commissionAmountElement ? commissionAmountElement.textContent.replace(/\D/g, '') : '0'; 
 
