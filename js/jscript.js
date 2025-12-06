@@ -1977,7 +1977,21 @@ function setupFullscreenOverlay() {
     };
     console.log();
 })();
-
+// Copy paste ini saja
+    var prevScrollpos = window.pageYOffset;
+    window.onscroll = function() {
+        var currentScrollPos = window.pageYOffset;
+        var footer = document.getElementById("floating-footer");
+        
+        if (prevScrollpos < currentScrollPos && currentScrollPos > 100) {
+            // Scroll down
+            footer.style.transform = "translateY(100%)";
+        } else {
+            // Scroll up
+            footer.style.transform = "translateY(0)";
+        }
+        prevScrollpos = currentScrollPos;
+    }
 // Panggil fungsi utama saat halaman dimuat
 document.addEventListener('DOMContentLoaded', function() {
     console.log("DOM loaded, initializing product page");
